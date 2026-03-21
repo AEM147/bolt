@@ -1,0 +1,112 @@
+{
+  "reviewQueue": [
+    {
+      "id": "content_draft_001",
+      "title": "Microsoft's New AI Breakthrough Changes Everything",
+      "script": "Hey humans! Bolt here with your daily download on the most electrifying AI news. Microsoft just dropped a bombshell that's going to revolutionize how we think about artificial intelligence...",
+      "status": "pending_review",
+      "platform": "youtube",
+      "estimatedViews": 25000,
+      "aiScore": 8.7,
+      "keywords": ["microsoft", "ai breakthrough", "technology"],
+      "generatedAt": "2025-06-24T00:45:00Z",
+      "scheduledFor": "2025-06-24T16:00:00Z"
+    },
+    {
+      "id": "content_draft_002", 
+      "title": "This AI Can Read Your Mind (Almost!)",
+      "script": "What's up tech enthusiasts! Ready to get your circuits blown? Scientists just created an AI that can literally decode thoughts from brain scans. Let's get wired!",
+      "status": "pending_review",
+      "platform": "tiktok",
+      "estimatedViews": 45000,
+      "aiScore": 9.2,
+      "keywords": ["brain ai", "mind reading", "neuroscience"],
+      "generatedAt": "2025-06-24T00:30:00Z",
+      "scheduledFor": "2025-06-24T14:30:00Z"
+    },
+    {
+      "id": "content_draft_003",
+      "title": "AI Creates Perfect Music in Seconds",
+      "script": "Music lovers, this is HUGE! A new AI just composed a symphony that brought people to tears. The future of creativity is here, and it's absolutely mind-blowing!",
+      "status": "approved",
+      "platform": "instagram",
+      "estimatedViews": 18000,
+      "aiScore": 8.4,
+      "keywords": ["ai music", "creativity", "composition"],
+      "generatedAt": "2025-06-23T23:15:00Z",
+      "scheduledFor": "2025-06-24T12:00:00Z"
+    }
+  ],
+  "publishedContent": [
+    {
+      "id": "content_001",
+      "title": "Breaking: OpenAI Announces GPT-5 Release Date",
+      "platform": "youtube",
+      "publishDate": "2025-06-22T10:30:00Z",
+      "status": "published",
+      "performance": {
+        "views": 89234,
+        "likes": 4521,
+        "comments": 892,
+        "shares": 234,
+        "engagementRate": 6.8
+      }
+    },
+    {
+      "id": "content_002",
+      "title": "Google's New AI Can Code Better Than Humans", 
+      "platform": "tiktok",
+      "publishDate": "2025-06-21T14:15:00Z",
+      "status": "published",
+      "performance": {
+        "views": 76543,
+        "likes": 3890,
+        "comments": 567,
+        "shares": 189,
+        "engagementRate": 7.2
+      }
+    }
+  ],
+  "contentCalendar": [
+    {
+      "date": "2025-06-24",
+      "posts": [
+        {
+          "time": "12:00",
+          "platform": "instagram",
+          "title": "AI Creates Perfect Music in Seconds",
+          "status": "scheduled"
+        },
+        {
+          "time": "14:30",
+          "platform": "tiktok", 
+          "title": "This AI Can Read Your Mind (Almost!)",
+          "status": "pending_review"
+        },
+        {
+          "time": "16:00",
+          "platform": "youtube",
+          "title": "Microsoft's New AI Breakthrough Changes Everything",
+          "status": "pending_review"
+        }
+      ]
+    },
+    {
+      "date": "2025-06-25",
+      "posts": [
+        {
+          "time": "10:00",
+          "platform": "youtube",
+          "title": "Tesla's FSD Gets Mind-Blowing Update",
+          "status": "in_progress"
+        },
+        {
+          "time": "15:00",
+          "platform": "tiktok",
+          "title": "AI Robots Are Getting Scary Good at This",
+          "status": "draft"
+        }
+      ]
+    }
+  ]
+}

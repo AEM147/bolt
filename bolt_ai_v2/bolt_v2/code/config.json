@@ -1,0 +1,387 @@
+{
+  "_comment": "Bolt AI v2 \u2014 All tools have a FREE tier. Replace YOUR_* values with real keys.",
+  "version": "2.1",
+  "character": {
+    "name": "Bolt",
+    "tagline": "Your AI news robot",
+    "catchphrases": [
+      "Stay curious, humans!",
+      "Let's get wired!",
+      "Bolt out \u2014 keep charging!",
+      "Until next time, stay plugged in!",
+      "That's your AI download for today!"
+    ],
+    "personality": "enthusiastic, friendly, slightly robotic humor, energetic, accessible",
+    "target_duration_seconds": 45,
+    "max_words_per_script": 130
+  },
+  "apis": {
+    "_voice_note": "Priority: edge-tts (unlimited free) > google_tts (1M/mo free) > elevenlabs (10K/mo free)",
+    "anthropic_api_key": "\u2192 set ANTHROPIC_API_KEY in .env",
+    "anthropic_model": "claude-sonnet-4-20250514",
+    "_tts_1_edgetts": "edge-tts \u2014 COMPLETELY FREE, no key. pip install edge-tts",
+    "google_cloud_tts_key": "\u2192 set GOOGLE_CLOUD_TTS_KEY in .env",
+    "google_tts_voice": "en-US-Neural2-J",
+    "_tts_2_elevenlabs": "10,000 chars/month FREE \u2014 elevenlabs.io",
+    "elevenlabs_api_key": "\u2192 set ELEVENLABS_API_KEY in .env",
+    "elevenlabs_voice_id": "\u2192 set ELEVENLABS_VOICE_ID in .env",
+    "_avatar_1_vidnoz": "FREE: 1900+ avatars, no watermark \u2014 vidnoz.com/developer",
+    "vidnoz_api_key": "\u2192 set VIDNOZ_API_KEY in .env",
+    "vidnoz_avatar_id": "\u2192 set VIDNOZ_AVATAR_ID in .env",
+    "_avatar_2_did": "FREE: 20 credits/month (~20 videos) \u2014 studio.d-id.com",
+    "did_api_key": "\u2192 set DID_API_KEY in .env",
+    "did_presenter_url": "\u2192 set DID_PRESENTER_URL in .env",
+    "_scheduling": "Buffer FREE: 3 channels, 30 posts/channel \u2014 buffer.com",
+    "buffer_access_token": "\u2192 set BUFFER_ACCESS_TOKEN in .env",
+    "_youtube_note": "YouTube Data API v3 \u2014 FREE with Google account \u2014 console.cloud.google.com",
+    "youtube_client_id": "\u2192 set YOUTUBE_CLIENT_ID in .env",
+    "youtube_client_secret": "\u2192 set YOUTUBE_CLIENT_SECRET in .env",
+    "youtube_refresh_token": "\u2192 set YOUTUBE_REFRESH_TOKEN in .env",
+    "_tiktok_note": "TikTok API \u2014 FREE \u2014 developers.tiktok.com",
+    "tiktok_access_token": "\u2192 set TIKTOK_ACCESS_TOKEN in .env",
+    "_instagram_note": "Instagram Graph API \u2014 FREE \u2014 developers.facebook.com",
+    "instagram_access_token": "\u2192 set INSTAGRAM_ACCESS_TOKEN in .env",
+    "instagram_user_id": "\u2192 set INSTAGRAM_USER_ID in .env",
+    "_notify": "Discord Webhook \u2014 FREE \u2014 Server Settings > Integrations > Webhooks",
+    "discord_webhook_url": "\u2192 set DISCORD_WEBHOOK_URL in .env"
+  },
+  "platforms": {
+    "youtube": {
+      "enabled": true,
+      "post_time": "14:00",
+      "timezone": "America/New_York"
+    },
+    "tiktok": {
+      "enabled": true,
+      "post_time": "19:00",
+      "timezone": "America/New_York"
+    },
+    "instagram": {
+      "enabled": true,
+      "post_time": "12:00",
+      "timezone": "America/New_York"
+    }
+  },
+  "content_pillars": {
+    "monday": "ai_news",
+    "tuesday": "ai_tools",
+    "wednesday": "ai_concepts",
+    "thursday": "ai_news",
+    "friday": "ai_tools",
+    "saturday": "ai_concepts",
+    "sunday": "ai_daily_life"
+  },
+  "automation": {
+    "news_fetch_interval_hours": 6,
+    "auto_publish_threshold": 8.5,
+    "auto_publish_enabled": false,
+    "review_queue_enabled": true,
+    "max_retries": 3,
+    "notify_discord": true
+  },
+  "quality_gate": {
+    "min_script_words": 80,
+    "max_script_words": 135,
+    "min_overall_score": 8.5,
+    "auto_approve_above": 9.0,
+    "auto_reject_below": 6.0,
+    "banned_words": [
+      "allegedly",
+      "reportedly",
+      "may have",
+      "we think",
+      "supposed",
+      "claimed"
+    ]
+  },
+  "hashtags": {
+    "ai_news": [
+      "#AINews",
+      "#ArtificialIntelligence",
+      "#TechNews",
+      "#AI",
+      "#MachineLearning",
+      "#TechUpdate",
+      "#AIDaily"
+    ],
+    "ai_tools": [
+      "#AITools",
+      "#ProductivityHack",
+      "#TechTools",
+      "#AI",
+      "#WorkSmarter",
+      "#AIApps",
+      "#FutureOfWork"
+    ],
+    "ai_concepts": [
+      "#LearnAI",
+      "#AIExplained",
+      "#MachineLearning",
+      "#DeepLearning",
+      "#AIEducation",
+      "#TechLearning"
+    ],
+    "ai_daily_life": [
+      "#AILife",
+      "#FutureNow",
+      "#AIProductivity",
+      "#SmartLiving",
+      "#AIHacks",
+      "#TechTips",
+      "#AIForEveryone"
+    ]
+  },
+  "news_sources": {
+    "OpenAI Blog": {
+      "url": "https://openai.com/blog/rss.xml",
+      "reliability": 0.98
+    },
+    "Anthropic Blog": {
+      "url": "https://www.anthropic.com/news/rss.xml",
+      "reliability": 0.98
+    },
+    "Google DeepMind": {
+      "url": "https://deepmind.google/blog/feed/",
+      "reliability": 0.97
+    },
+    "TechCrunch AI": {
+      "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
+      "reliability": 0.9
+    },
+    "The Verge AI": {
+      "url": "https://www.theverge.com/rss/group/ai-artificial-intelligence/index.xml",
+      "reliability": 0.88
+    },
+    "MIT Technology Review": {
+      "url": "https://www.technologyreview.com/c/artificial-intelligence/feed/",
+      "reliability": 0.95
+    },
+    "WIRED AI": {
+      "url": "https://www.wired.com/feed/category/artificial-intelligence/latest/rss",
+      "reliability": 0.9
+    },
+    "VentureBeat AI": {
+      "url": "https://venturebeat.com/category/ai/feed/",
+      "reliability": 0.82
+    },
+    "Ars Technica": {
+      "url": "https://feeds.arstechnica.com/arstechnica/index/",
+      "reliability": 0.88
+    },
+    "ScienceDaily AI": {
+      "url": "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
+      "reliability": 0.92
+    },
+    "Google AI Blog": {
+      "url": "https://ai.googleblog.com/feeds/posts/default",
+      "reliability": 0.95
+    },
+    "Hugging Face Blog": {
+      "url": "https://huggingface.co/blog/feed.xml",
+      "reliability": 0.92
+    },
+    "NVIDIA Blog": {
+      "url": "https://blogs.nvidia.com/feed/",
+      "reliability": 0.88
+    },
+    "Microsoft Research AI": {
+      "url": "https://www.microsoft.com/en-us/research/blog/feed/",
+      "reliability": 0.9
+    },
+    "AI News": {
+      "url": "https://www.artificialintelligence-news.com/feed/",
+      "reliability": 0.78
+    },
+    "KDnuggets": {
+      "url": "https://www.kdnuggets.com/tag/ai/feed",
+      "reliability": 0.82
+    },
+    "Towards Data Science": {
+      "url": "https://towardsdatascience.com/feed",
+      "reliability": 0.8
+    }
+  },
+  "paths": {
+    "base": "/workspace/bolt_v2",
+    "logs": "/workspace/bolt_v2/logs",
+    "data": "/workspace/bolt_v2/data",
+    "queue": "/workspace/bolt_v2/data/queue",
+    "published": "/workspace/bolt_v2/data/published",
+    "analytics": "/workspace/bolt_v2/data/analytics",
+    "audio": "/workspace/bolt_v2/content/audio",
+    "video": "/workspace/bolt_v2/content/video",
+    "thumbnails": "/workspace/bolt_v2/content/thumbnails",
+    "assets": "/workspace/bolt_v2/assets",
+    "backups": "/workspace/bolt_v2/backups"
+  },
+  "notifications": {
+    "discord": {
+      "enabled": true,
+      "webhook_url": "\u2192 set DISCORD_WEBHOOK_URL in .env"
+    },
+    "email": {
+      "enabled": false,
+      "smtp_server": "smtp.gmail.com",
+      "smtp_port": 587,
+      "username": "your_email@gmail.com",
+      "password": "your_app_password",
+      "recipients": [
+        "email@example.com"
+      ]
+    },
+    "telegram": {
+      "enabled": false,
+      "bot_token": "\u2192 set TELEGRAM_BOT_TOKEN in .env",
+      "chat_id": "\u2192 set TELEGRAM_CHAT_ID in .env"
+    },
+    "console": {
+      "enabled": true
+    },
+    "notify_on": {
+      "pipeline_start": true,
+      "pipeline_complete": true,
+      "script_generated": true,
+      "video_complete": true,
+      "published": true,
+      "errors": true,
+      "quality_alerts": true,
+      "backup_complete": true
+    }
+  },
+  "backup": {
+    "enabled": true,
+    "auto_backup": {
+      "daily": true,
+      "weekly": true,
+      "monthly": true
+    },
+    "retention": {
+      "daily": 7,
+      "weekly": 4,
+      "monthly": 12
+    },
+    "compress": true,
+    "backup_path": "/workspace/bolt_v2/backups"
+  },
+  "cost_tracking": {
+    "enabled": true,
+    "track_claude": true,
+    "track_elevenlabs": true,
+    "track_google_tts": true,
+    "monthly_budget_alert": 10.0,
+    "per_video_budget_alert": 0.5,
+    "pricing_usd": {
+      "_note": "Edit these values whenever Claude or other providers update pricing. No code changes needed.",
+      "claude-3-haiku_input_1k": 0.00025,
+      "claude-3-haiku_output_1k": 0.00125,
+      "claude-3-sonnet_input_1k": 0.003,
+      "claude-3-sonnet_output_1k": 0.015,
+      "claude-3-5-sonnet_input_1k": 0.003,
+      "claude-3-5-sonnet_output_1k": 0.015,
+      "elevenlabs_1k_chars": 0.001,
+      "heygen_1_minute": 0.04,
+      "vidnoz_1_video": 0.0,
+      "did_1_video": 0.0,
+      "creatomate_per_render": 0.01,
+      "google_tts_1k_chars_neural": 1.6e-05,
+      "google_tts_1k_chars_std": 4e-06,
+      "edge_tts_1k_chars": 0.0,
+      "youtube_upload": 0.0,
+      "buffer_post": 0.0
+    },
+    "monthly_budget_hard_stop": 20.0,
+    "daily_budget_hard_stop": 5.0,
+    "per_video_budget_hard_stop": 1.0,
+    "_note_hard_stops": "Hard stops BLOCK the pipeline. Alerts send notifications only."
+  },
+  "error_handling": {
+    "fallback_strategy": {
+      "claude_failure": "use_template_script",
+      "voice_failure": "try_next_provider",
+      "avatar_failure": "use_ffmpeg_textcard",
+      "youtube_failure": "queue_for_retry",
+      "tiktok_failure": "fallback_to_buffer",
+      "instagram_failure": "fallback_to_buffer"
+    },
+    "max_retries": {
+      "claude": 3,
+      "voice": 3,
+      "avatar": 2,
+      "publish": 3
+    },
+    "retry_delay_seconds": 30,
+    "circuit_breaker": {
+      "enabled": true,
+      "failure_threshold": 5,
+      "timeout_minutes": 15
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "console": true,
+    "file": true,
+    "file_path": "/workspace/bolt_v2/logs",
+    "max_file_size_mb": 10,
+    "backup_count": 7
+  },
+  "advanced": {
+    "cache_enabled": true,
+    "cache_ttl_hours": 24,
+    "rate_limiting": {
+      "enabled": true,
+      "claude_requests_per_minute": 50,
+      "voice_requests_per_minute": 100
+    },
+    "parallel_processing": {
+      "enabled": true,
+      "max_workers": 4
+    }
+  },
+  "local_tts": {
+    "_note": "Edge-TTS settings. Change voice here \u2014 no code edits needed. Run: python local_tts.py --list for all options.",
+    "voice": "en-US-GuyNeural",
+    "voice_fallback_chain": [
+      "en-US-GuyNeural",
+      "en-US-ChristopherNeural",
+      "en-US-EricNeural",
+      "en-GB-RyanNeural"
+    ],
+    "rate": "+8%",
+    "pitch": "+5Hz",
+    "volume": "+10%",
+    "voice_options": {
+      "_note": "Reference only \u2014 voices you can switch to",
+      "energetic_male": "en-US-GuyNeural",
+      "rich_baritone": "en-US-ChristopherNeural",
+      "crisp_confident": "en-US-EricNeural",
+      "british_authority": "en-GB-RyanNeural",
+      "warm_approachable": "en-US-AndrewNeural",
+      "australian_fun": "en-AU-WilliamNeural"
+    }
+  },
+  "hitl": {
+    "_note": "Human-in-the-loop approval. Pipeline pauses after script gen and waits for your decision.",
+    "enabled": true,
+    "timeout_hours": 12,
+    "poll_interval_seconds": 60,
+    "auto_approve_above": 9.0,
+    "auto_reject_below": 6.0,
+    "approval_methods": {
+      "cli": "python hitl.py approve <content_id>",
+      "flag_file": "touch data/queue/<content_id>_APPROVED.flag",
+      "dashboard": "Click Approve in the Content Queue page"
+    },
+    "notify_on_pause": true,
+    "notify_on_decision": true
+  },
+  "api_server": {
+    "host": "0.0.0.0",
+    "port": 8000,
+    "cors_origins": [
+      "http://localhost:5173",
+      "http://localhost:3000"
+    ],
+    "docs_enabled": true,
+    "_note": "FastAPI backend. Start with: uvicorn code.api:app --port 8000"
+  }
+}
