@@ -131,6 +131,7 @@
       "#AIForEveryone"
     ]
   },
+  "_news_sources_note": "Free-only sources. Paywalled feeds (MIT Tech Review, WIRED, Ars Technica, Towards Data Science) removed.",
   "news_sources": {
     "OpenAI Blog": {
       "url": "https://openai.com/blog/rss.xml",
@@ -152,21 +153,9 @@
       "url": "https://www.theverge.com/rss/group/ai-artificial-intelligence/index.xml",
       "reliability": 0.88
     },
-    "MIT Technology Review": {
-      "url": "https://www.technologyreview.com/c/artificial-intelligence/feed/",
-      "reliability": 0.95
-    },
-    "WIRED AI": {
-      "url": "https://www.wired.com/feed/category/artificial-intelligence/latest/rss",
-      "reliability": 0.9
-    },
     "VentureBeat AI": {
       "url": "https://venturebeat.com/category/ai/feed/",
       "reliability": 0.82
-    },
-    "Ars Technica": {
-      "url": "https://feeds.arstechnica.com/arstechnica/index/",
-      "reliability": 0.88
     },
     "ScienceDaily AI": {
       "url": "https://www.sciencedaily.com/rss/computers_math/artificial_intelligence.xml",
@@ -195,10 +184,6 @@
     "KDnuggets": {
       "url": "https://www.kdnuggets.com/tag/ai/feed",
       "reliability": 0.82
-    },
-    "Towards Data Science": {
-      "url": "https://towardsdatascience.com/feed",
-      "reliability": 0.8
     }
   },
   "paths": {
