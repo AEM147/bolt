@@ -192,10 +192,16 @@ def publish_all_platforms(package: dict, config: dict) -> dict:
     Publish the video to all enabled platforms.
     Uses YouTube Data API directly for YouTube, Buffer for TikTok + Instagram.
     """
-    video_url = package.get("final_video_url") or package.get("avatar_video_url")
+    # Check both URL and path keys (video_pipeline stores _path, external CDNs store _url)
+    video_url = (
+        package.get("final_video_url")
+        or package.get("final_video_path")
+        or package.get("avatar_video_url")
+        or package.get("avatar_video_path")
+    )
     if not video_url:
-        logger.error("No video URL in package — cannot publish")
-        return {"success": False, "error": "No video URL available"}
+        logger.error("No video URL/path in package — cannot publish")
+        return {"success": False, "error": "No video URL/path available"}
 
     results = {}
     access_token = config["apis"].get("buffer_access_token", "")

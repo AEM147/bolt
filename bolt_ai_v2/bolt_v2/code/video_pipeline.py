@@ -18,12 +18,28 @@ def load_config(path="code/config.json"):
     return get_config(path)
 
 # ── VOICE TIER 1: Edge-TTS (unlimited, no key needed) ──
+def _run_async(coro):
+    """Run an async coroutine safely, whether or not an event loop is already running."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        # Already inside an event loop (e.g. called from scheduler via async pipeline)
+        # Create a new thread to run the coroutine in its own event loop
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result(timeout=120)
+    else:
+        return asyncio.run(coro)
+
+
 def synthesize_edge_tts(script, content_id, config):
     """Use local_tts.py (dedicated edge-tts module) as primary free voice provider."""
     try:
         from local_tts import generate_with_retries
         out_filename = f"{content_id}_edge.mp3"
-        result = asyncio.run(generate_with_retries(script, out_filename, config, max_retries=3))
+        result = _run_async(generate_with_retries(script, out_filename, config, max_retries=3))
         return result
     except ImportError:
         pass  # Fallback to inline edge_tts below
@@ -39,7 +55,7 @@ def synthesize_edge_tts(script, content_id, config):
         async def _run():
             c = edge_tts.Communicate(script, voice=voice, rate=rate, pitch=pitch)
             await c.save(str(out_path))
-        asyncio.run(_run())
+        _run_async(_run())
         logger.info(f"Edge TTS OK: {out_path.name}")
         return str(out_path)
     except ImportError:

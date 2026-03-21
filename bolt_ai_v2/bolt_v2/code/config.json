@@ -202,17 +202,18 @@
     }
   },
   "paths": {
-    "base": "/workspace/bolt_v2",
-    "logs": "/workspace/bolt_v2/logs",
-    "data": "/workspace/bolt_v2/data",
-    "queue": "/workspace/bolt_v2/data/queue",
-    "published": "/workspace/bolt_v2/data/published",
-    "analytics": "/workspace/bolt_v2/data/analytics",
-    "audio": "/workspace/bolt_v2/content/audio",
-    "video": "/workspace/bolt_v2/content/video",
-    "thumbnails": "/workspace/bolt_v2/content/thumbnails",
-    "assets": "/workspace/bolt_v2/assets",
-    "backups": "/workspace/bolt_v2/backups"
+    "_note": "Relative paths work from the project root. Override with absolute paths for Docker/VPS.",
+    "base": ".",
+    "logs": "logs",
+    "data": "data",
+    "queue": "data/queue",
+    "published": "data/published",
+    "analytics": "data/analytics",
+    "audio": "content/audio",
+    "video": "content/video",
+    "thumbnails": "content/thumbnails",
+    "assets": "assets",
+    "backups": "backups"
   },
   "notifications": {
     "discord": {
@@ -261,7 +262,7 @@
       "monthly": 12
     },
     "compress": true,
-    "backup_path": "/workspace/bolt_v2/backups"
+    "backup_path": "backups"
   },
   "cost_tracking": {
     "enabled": true,
@@ -320,7 +321,7 @@
     "level": "INFO",
     "console": true,
     "file": true,
-    "file_path": "/workspace/bolt_v2/logs",
+    "file_path": "logs",
     "max_file_size_mb": 10,
     "backup_count": 7
   },

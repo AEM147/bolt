@@ -166,7 +166,7 @@ def step_publish(notifier, cb, tracker):
         result = platform_publisher.run()
         if result:
             res = result.get("publish_results",{})
-            db.save_publish_results(result["article"]["title"][:20], res)
+            db.save_publish_results(result.get("content_id", result["article"]["title"][:20]), res)
             lines=[f"{'✅' if r.get('success') else '❌'} {p.title()}: {(r.get('url') or r.get('error',''))[:50]}"
                    for p,r in res.items()]
             tracker.increment_video_count()

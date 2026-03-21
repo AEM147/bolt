@@ -228,6 +228,20 @@ class BoltDB:
             """).fetchone()
             return dict(row) if row else None
 
+    def get_recent_articles(self, limit: int = 50, status: Optional[str] = None) -> list[dict]:
+        """Get recent articles, optionally filtered by status."""
+        with _get_conn(self.db_path) as conn:
+            if status:
+                rows = conn.execute(
+                    "SELECT * FROM articles WHERE status=? ORDER BY fetched_at DESC LIMIT ?",
+                    (status, limit)
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM articles ORDER BY fetched_at DESC LIMIT ?", (limit,)
+                ).fetchall()
+            return [dict(r) for r in rows]
+
     def mark_article_used(self, article_id: int) -> None:
         with _get_conn(self.db_path) as conn:
             conn.execute("UPDATE articles SET status='used' WHERE id=?", (article_id,))
@@ -444,7 +458,20 @@ class BoltDB:
             """, (job_type, content_id, "pending", max_attempts, now, now))
             return cur.lastrowid
 
-    def get_pending_jobs(self, job_type: Optional[str] = None) -> list[dict]:
+    def get_script_by_content_id(self, content_id: str) -> Optional[dict]:
+        """Get a single script by its content_id."""
+        with _get_conn(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT * FROM scripts WHERE content_id=?", (content_id,)
+            ).fetchone()
+            if not row:
+                return None
+            d = dict(row)
+            d["quality"] = json.loads(d.pop("quality_json", "{}"))
+            d["captions"] = json.loads(d.pop("captions_json", "{}"))
+            return d
+
+    def get_pending_jobs(self, job_type: Optional[str] = None, limit: int = 10) -> list[dict]:
         """Get jobs ready to run (pending or retrying with next_run_at in the past)."""
         now = datetime.now(timezone.utc).isoformat()
         with _get_conn(self.db_path) as conn:
@@ -454,16 +481,16 @@ class BoltDB:
                     WHERE job_type=? AND status IN ('pending','retrying')
                       AND (next_run_at IS NULL OR next_run_at <= ?)
                       AND attempts < max_attempts
-                    ORDER BY created_at ASC LIMIT 10
-                """, (job_type, now)).fetchall()
+                    ORDER BY created_at ASC LIMIT ?
+                """, (job_type, now, limit)).fetchall()
             else:
                 rows = conn.execute("""
                     SELECT * FROM jobs
                     WHERE status IN ('pending','retrying')
                       AND (next_run_at IS NULL OR next_run_at <= ?)
                       AND attempts < max_attempts
-                    ORDER BY created_at ASC LIMIT 10
-                """, (now,)).fetchall()
+                    ORDER BY created_at ASC LIMIT ?
+                """, (now, limit)).fetchall()
             return [dict(r) for r in rows]
 
     def fail_job(self, job_id: int, error: str, retry_after_seconds: int = 300) -> None:

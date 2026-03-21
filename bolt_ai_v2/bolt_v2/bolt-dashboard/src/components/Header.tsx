@@ -25,7 +25,8 @@ export default function Header() {
 
   useEffect(() => {
     // Connect to SSE stream for real-time updates
-    const es = new EventSource('http://localhost:8000/api/stream/status')
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    const es = new EventSource(`${apiBase}/api/stream/status`)
     es.onopen    = ()  => setConnected(true)
     es.onerror   = ()  => setConnected(false)
     es.onmessage = (e) => {

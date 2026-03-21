@@ -232,8 +232,7 @@ async def get_scripts(status: Optional[str] = None, limit: int = 50):
 async def get_script(content_id: str):
     """Single script detail."""
     db = get_db()
-    scripts = db.get_scripts(limit=200)
-    match = next((s for s in scripts if s["content_id"] == content_id), None)
+    match = db.get_script_by_content_id(content_id)
     if not match:
         raise HTTPException(status_code=404, detail=f"Script {content_id} not found")
     return match
@@ -449,14 +448,24 @@ async def spa_fallback(path: str):
 
 
 # ── Add _get_conn_ctx to BoltDB ────────────────────────────────────────────
-# (monkeypatching to keep database.py clean)
+# Proper context manager that closes connections after use
 from contextlib import contextmanager
 import sqlite3
 
+@contextmanager
 def _get_conn_ctx(self):
     conn = sqlite3.connect(str(self.db_path), timeout=30)
     conn.row_factory = sqlite3.Row
-    return conn
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 BoltDB._get_conn_ctx = _get_conn_ctx
 

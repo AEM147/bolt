@@ -239,10 +239,17 @@ class RateLimiterRegistry:
         self._load_from_config()
 
     def _load_from_config(self) -> None:
-        limits = (
+        raw_limits = (
             self._config.get("advanced", {})
                         .get("rate_limiting", {})
         )
+        # Normalize config keys: "claude_requests_per_minute" -> "claude"
+        limits = {}
+        for k, v in raw_limits.items():
+            if k in ("enabled",):
+                continue  # Skip non-service keys
+            normalized = k.replace("_requests_per_minute", "")
+            limits[normalized] = v
         combined = {**self._DEFAULTS, **limits}
         for service, rpm in combined.items():
             if isinstance(rpm, (int, float)) and rpm > 0:
