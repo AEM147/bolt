@@ -49,7 +49,9 @@
     "youtube": {
       "enabled": true,
       "post_time": "14:00",
-      "timezone": "America/New_York"
+      "timezone": "America/New_York",
+      "category_id": "28",
+      "privacy": "public"
     },
     "tiktok": {
       "enabled": true,

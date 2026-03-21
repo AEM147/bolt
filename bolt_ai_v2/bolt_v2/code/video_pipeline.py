@@ -103,14 +103,14 @@ def synthesize_elevenlabs(script, content_id, config):
         logger.warning(f"ElevenLabs error: {e}"); return None
 
 def synthesize_voice(script, content_id, config):
-    """Try providers in order — all free."""
-    for name, fn in [("Edge TTS (unlimited free)", lambda: synthesize_edge_tts(script, content_id, config)),
-                     ("Google Cloud TTS (1M/mo free)", lambda: synthesize_google_tts(script, content_id, config)),
-                     ("ElevenLabs (10K/mo free)", lambda: synthesize_elevenlabs(script, content_id, config))]:
-        logger.info(f"Trying: {name}")
+    """Try providers in order — all free. Returns (path, provider_name) or (None, None)."""
+    for provider, fn in [("edge_tts", lambda: synthesize_edge_tts(script, content_id, config)),
+                         ("google_tts", lambda: synthesize_google_tts(script, content_id, config)),
+                         ("elevenlabs", lambda: synthesize_elevenlabs(script, content_id, config))]:
+        logger.info(f"Trying: {provider}")
         r = fn()
-        if r: return r
-    logger.error("All voice providers failed"); return None
+        if r: return r, provider
+    logger.error("All voice providers failed"); return None, None
 
 # ── AVATAR TIER 1: Vidnoz (free, 1900+ avatars) ──
 def create_vidnoz_video(audio_path, content_id, config):
@@ -240,14 +240,20 @@ def run_video_pipeline(package, config):
     cid, script, article = package["content_id"], package["script"], package["article"]
     logger.info(f"Free video pipeline: {cid}")
 
-    audio = synthesize_voice(script, cid, config)
+    audio, audio_provider = synthesize_voice(script, cid, config)
     if not audio:
         package.update({"status":"failed_voice","error":"All free TTS providers failed. pip install edge-tts"}); return package
     package["audio_path"] = audio
+    package["audio_provider"] = audio_provider
 
-    avatar = create_vidnoz_video(audio, cid, config) or create_did_video(audio, cid, config)
+    avatar = create_vidnoz_video(audio, cid, config)
+    avatar_provider = "vidnoz" if avatar else None
+    if not avatar:
+        avatar = create_did_video(audio, cid, config)
+        avatar_provider = "did" if avatar else None
     if not avatar: logger.warning("No avatar available — using text-card fallback")
     package["avatar_video_path"] = avatar
+    package["avatar_provider"] = avatar_provider
 
     final = assemble_ffmpeg(audio, avatar, cid, script, config)
     package["final_video_path"] = final

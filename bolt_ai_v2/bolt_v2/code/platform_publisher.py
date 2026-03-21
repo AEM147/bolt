@@ -100,10 +100,10 @@ def publish_youtube(video_url: str, package: dict, config: dict) -> dict:
             "title": f"{title} #Shorts",
             "description": f"{description}\n\n{hashtags}",
             "tags": tags,
-            "categoryId": cfg["category_id"],
+            "categoryId": cfg.get("category_id", "28"),
         },
         "status": {
-            "privacyStatus": cfg["privacy"],
+            "privacyStatus": cfg.get("privacy", "public"),
             "selfDeclaredMadeForKids": False,
         },
     }
