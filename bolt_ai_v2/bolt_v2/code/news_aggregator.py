@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any
 import anthropic
 
+from http_utils import async_cached_get, cached_get, HTTPError
+
 logger = logging.getLogger("bolt.aggregator")
 
 
@@ -77,13 +79,7 @@ async def fetch_feed(session: aiohttp.ClientSession, name: str, info: dict) -> l
     """
     articles = []
     try:
-        try:
-            from http_utils import async_cached_get
-            text = await async_cached_get(session, info["url"], cache_ttl_hours=1.0, timeout_s=10)
-        except ImportError:
-            # Fallback if http_utils not available
-            async with session.get(info["url"], timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                text = await resp.text()
+        text = await async_cached_get(session, info["url"], cache_ttl_hours=1.0, timeout_s=10)
         if not text:
             return articles
         feed = feedparser.parse(text)
@@ -325,12 +321,86 @@ def get_backup_articles() -> list[dict]:
     ]
 
 
+def probe_feeds(config_path: str = "code/config.json") -> list[dict]:
+    """Probe all configured RSS feeds using http_utils.cached_get (synchronous).
+
+    Tests each feed URL for reachability, valid RSS content, and article count.
+    Uses the cached_get retry/rate-limit machinery so probes are polite and
+    cached for 1 hour (subsequent probes within that window hit disk).
+
+    Returns a list of probe results, one per feed:
+        {
+            "name": str,
+            "url": str,
+            "status": "ok" | "error" | "empty",
+            "article_count": int,
+            "error": str | None,
+            "cached": bool,
+        }
+    """
+    config = load_config(config_path)
+    sources = config.get("news_sources", {})
+    results = []
+
+    for name, info in sources.items():
+        url = info.get("url", "")
+        probe = {"name": name, "url": url, "status": "error",
+                 "article_count": 0, "error": None, "cached": False}
+        try:
+            text = cached_get(url, cache_ttl_hours=1.0, max_retries=2, timeout=10)
+            if not text:
+                probe["status"] = "empty"
+                probe["error"] = "Empty response"
+                results.append(probe)
+                continue
+
+            # If we got a string back (not JSON), parse as RSS
+            raw = text if isinstance(text, str) else json.dumps(text)
+            feed = feedparser.parse(raw)
+            n_entries = len(feed.entries)
+            probe["article_count"] = n_entries
+
+            if n_entries == 0:
+                probe["status"] = "empty"
+                probe["error"] = "Feed parsed but contained 0 entries"
+            else:
+                probe["status"] = "ok"
+
+            logger.info("Probe [%s]: %s (%d entries)", name, probe["status"], n_entries)
+
+        except HTTPError as e:
+            probe["error"] = f"HTTP {e.status_code}: {e.detail[:120]}"
+            logger.warning("Probe [%s] failed: %s", name, probe["error"])
+        except Exception as e:
+            probe["error"] = str(e)[:200]
+            logger.warning("Probe [%s] failed: %s", name, probe["error"])
+
+        results.append(probe)
+
+    ok = sum(1 for r in results if r["status"] == "ok")
+    logger.info("Feed probe complete: %d/%d sources reachable", ok, len(results))
+    return results
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-    top_stories = asyncio.run(run())
-    print(f"\n✅ Top {len(top_stories)} stories queued:\n")
-    for i, s in enumerate(top_stories, 1):
-        print(f"  {i}. [{s['claude_score']:.1f}] {s['title']}")
+
+    import sys as _sys
+    if len(_sys.argv) > 1 and _sys.argv[1] == "--probe":
+        results = probe_feeds()
+        print(f"\n{'='*60}")
+        print(f"  RSS Feed Probe Results ({sum(1 for r in results if r['status']=='ok')}/{len(results)} OK)")
+        print(f"{'='*60}")
+        for r in results:
+            icon = "OK" if r["status"] == "ok" else "EMPTY" if r["status"] == "empty" else "FAIL"
+            print(f"  [{icon:5s}] {r['name']:30s} {r['article_count']:3d} entries"
+                  + (f"  -- {r['error']}" if r["error"] else ""))
+        print(f"{'='*60}\n")
+    else:
+        top_stories = asyncio.run(run())
+        print(f"\n Top {len(top_stories)} stories queued:\n")
+        for i, s in enumerate(top_stories, 1):
+            print(f"  {i}. [{s['claude_score']:.1f}] {s['title']}")
 
 
 # ════════════════════════════════════════════════════════════════════
