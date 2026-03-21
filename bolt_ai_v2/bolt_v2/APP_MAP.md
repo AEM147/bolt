@@ -22,14 +22,15 @@ A full reference of every file, module, class, function, and data flow in the pr
 14. [Section L: Observability](#section-l-observability)
 15. [Section M: Notifications](#section-m-notifications)
 16. [Section N: Backup System](#section-n-backup-system)
-17. [Section O: Job Worker (Retry Queue)](#section-o-job-worker-retry-queue)
-18. [Section P: FastAPI Backend](#section-p-fastapi-backend)
-19. [Section Q: React Dashboard (Frontend)](#section-q-react-dashboard-frontend)
-20. [Section R: DevOps and Deployment](#section-r-devops-and-deployment)
-21. [Section S: Tests](#section-s-tests)
-22. [Section T: Documentation](#section-t-documentation)
-23. [Data Flow Diagram](#data-flow-diagram)
-24. [External Dependencies](#external-dependencies)
+17. [Section N2: HTTP Utilities](#section-n2-http-utilities)
+18. [Section O: Job Worker (Retry Queue)](#section-o-job-worker-retry-queue)
+19. [Section P: FastAPI Backend](#section-p-fastapi-backend)
+20. [Section Q: React Dashboard (Frontend)](#section-q-react-dashboard-frontend)
+21. [Section R: DevOps and Deployment](#section-r-devops-and-deployment)
+22. [Section S: Tests](#section-s-tests)
+23. [Section T: Documentation](#section-t-documentation)
+24. [Data Flow Diagram](#data-flow-diagram)
+25. [External Dependencies](#external-dependencies)
 
 ---
 
@@ -100,6 +101,7 @@ bolt_v2/
 |   |-- cost_tracker.py       # API usage cost tracking
 |   |-- budget_enforcer.py    # Spending hard stops
 |   |-- backup_system.py      # Data backup / restore
+|   |-- http_utils.py         # Shared HTTP client with disk caching, retries, rate limiting
 |
 |-- bolt-dashboard/           # ===== REACT FRONTEND =====
 |   |-- src/
@@ -137,6 +139,7 @@ bolt_v2/
 |   |-- published/            # Published content archive
 |   |-- analytics/            # Analytics snapshots + cost tracking
 |   |-- backups/              # Compressed backup archives
+|   |-- cache/http/           # HTTP response disk cache (managed by http_utils.py)
 |
 |-- content/                  # ===== GENERATED MEDIA =====
 |   |-- audio/                # TTS MP3 files
@@ -235,17 +238,20 @@ Lists all required/optional env vars grouped by service:
 #### CLI Commands
 
 ```
-python content_automation_master.py                  # Full pipeline (once)
-python content_automation_master.py --step news      # Just news aggregation
-python content_automation_master.py --step script    # Just script generation
-python content_automation_master.py --step video     # Just video rendering
-python content_automation_master.py --step publish   # Just publishing
-python content_automation_master.py --step analytics # Just analytics pull
-python content_automation_master.py --schedule       # 24/7 daemon mode
-python content_automation_master.py --backup daily   # Create backup
-python content_automation_master.py --cost-summary   # Show cost report
-python content_automation_master.py --db-stats       # Database statistics
-python content_automation_master.py --secrets-audit  # Check which secrets are configured
+python content_automation_master.py                          # Full pipeline (once)
+python content_automation_master.py --step news              # Just news aggregation
+python content_automation_master.py --step script            # Just script generation
+python content_automation_master.py --step video             # Just video rendering
+python content_automation_master.py --step publish           # Just publishing
+python content_automation_master.py --step analytics         # Just analytics pull
+python content_automation_master.py --schedule               # 24/7 daemon mode
+python content_automation_master.py --backup manual          # Create backup (daily|weekly|monthly|manual)
+python content_automation_master.py --list-backups           # List all backups
+python content_automation_master.py --restore BACKUP_ID      # Restore from a specific backup
+python content_automation_master.py --cost-summary           # Show cost report
+python content_automation_master.py --db-stats               # Database statistics
+python content_automation_master.py --secrets-audit          # Check which secrets are configured
+python content_automation_master.py --config path/to/cfg     # Use custom config.json path
 ```
 
 ---
@@ -310,8 +316,7 @@ Uses Claude to write 100-130 word scripts in Bolt's voice, with auto-scoring and
 #### Quality Gate Logic
 
 ```
-Score >= 9.0  --> auto_approved = True, status = "approved"
-Score >= 8.5  --> auto_approved = True, status = "approved"  
+Score >= 8.5  --> auto_approved = True, status = "approved"
 Score >= 6.0  --> auto_approved = False, status = "pending_review" (needs HITL)
 Score <  6.0  --> auto_rejected, discarded
 ```
@@ -557,7 +562,7 @@ WAL mode enabled, foreign keys enforced.
 | `scripts` | Generated scripts | `content_id` (unique), `script`, `overall_score`, `status`, `auto_approved` |
 | `videos` | Video pipeline output | `content_id` (FK), `audio_path`, `avatar_path`, `final_path`, `video_ready` |
 | `publications` | Per-platform publish results | `content_id`, `platform`, `success`, `url`, `error` |
-| `analytics` | Daily metric snapshots | `platform`, `date`, `metrics_json` |
+| `analytics_snapshots` | Daily metric snapshots | `platform`, `fetched_at`, `followers`, `views_30d`, `engagement_rate`, `raw_json` |
 | `cost_events` | Individual API cost events | `service`, `operation`, `cost`, `timestamp` |
 | `jobs` | Retry queue | `job_type`, `content_id`, `status`, `attempts`, `max_attempts` |
 
@@ -565,13 +570,13 @@ WAL mode enabled, foreign keys enforced.
 
 | Method Group | Methods |
 |-------------|---------|
-| Articles | `save_article()`, `save_articles()`, `get_recent_articles()`, `get_top_article()` |
-| Scripts | `save_script()`, `get_scripts()`, `get_script_by_id()`, `update_script_status()` |
-| Videos | `save_video()`, `get_video()` |
-| Publications | `save_publish_results()`, `get_publications()` |
-| Analytics | `save_analytics_snapshot()`, `get_analytics()` |
-| Costs | `save_cost_event()`, `get_cost_summary()` |
-| Jobs | `enqueue_job()`, `get_pending_jobs()`, `update_job_status()`, `mark_job_done()` |
+| Articles | `save_article()`, `save_articles()`, `get_recent_articles()`, `get_top_article()`, `mark_article_used()` |
+| Scripts | `save_script()`, `get_scripts()`, `get_script_by_content_id()`, `get_pending_script()`, `approve_script()`, `reject_script()` |
+| Videos | `save_video()` |
+| Publications | `save_publication()`, `save_publish_results()` |
+| Analytics | `save_analytics_snapshot()`, `get_latest_analytics()` |
+| Costs | `record_cost()`, `get_cost_summary()` |
+| Jobs | `enqueue_job()`, `get_pending_jobs()`, `fail_job()`, `complete_job()` |
 | Dashboard | `get_dashboard_summary()` |
 
 #### Singleton: `get_db()`
@@ -656,6 +661,56 @@ Backs up: `data/queue/`, `data/published/`, `data/analytics/`, `content/*`, `log
 
 ---
 
+## Section N2: HTTP Utilities
+
+### `code/http_utils.py` -- Shared HTTP Client
+
+Centralized HTTP layer with disk caching, exponential-backoff retries, and per-host rate limiting. All outbound HTTP requests in the pipeline should route through this module for consistent behavior.
+
+#### Classes
+
+| Class | Purpose |
+|-------|---------|
+| `HTTPError` | Raised when a request fails after all retries. Attributes: `url`, `status_code`, `detail` |
+
+#### Functions
+
+| Function | Signature | Purpose |
+|----------|-----------|---------|
+| `cached_get()` | `(url, params?, headers?, cache_ttl_hours=1.0, max_retries=3, backoff_factor=2.0, timeout=15, cache_dir?)` | HTTP GET with disk caching and exponential-backoff retries |
+| `cached_post()` | `(url, json_data?, data?, headers?, max_retries=3, backoff_factor=2.0, timeout=30)` | HTTP POST with retries (no caching) |
+| `async_cached_get()` | `async (session, url, cache_ttl_hours=1.0, timeout_s=10, cache_dir?)` | Async HTTP GET using aiohttp with disk caching (for `news_aggregator`) |
+| `get_request_log()` | `() -> list[dict]` | Return audit log of all HTTP requests made during the process |
+| `clear_request_log()` | `()` | Clear the request audit log |
+
+#### Internal Helpers
+
+| Function | Purpose |
+|----------|---------|
+| `_cache_key()` | SHA-256 hash of URL + sorted params for deterministic cache keys |
+| `_cache_path()` | Map cache key to file path in `data/cache/http/` |
+| `_read_cache()` | Return cached response if fresh (within TTL), else None |
+| `_write_cache()` | Persist JSON-serializable response to disk |
+| `_extract_host()` | Parse hostname from URL for per-host rate limiting |
+| `_rate_limit_wait()` | Sleep if needed to respect per-host minimum intervals |
+
+#### Per-Host Rate Limits
+
+Configured per hostname. Defaults to 0.5s between requests for unknown hosts. Examples:
+- RSS feeds (openai.com, anthropic.com, etc.): 0.5--1.0s
+- Anthropic API: 0.1s (50 req/min)
+- ElevenLabs API: 3.0s (20 req/min)
+- YouTube/Google APIs: 0.2--0.5s
+
+#### Retry Behavior
+
+- Retryable status codes: 429, 500, 502, 503, 504
+- 429 responses honor the `Retry-After` header
+- Exponential backoff: attempt 0 = immediate, attempt 1 = 2s, attempt 2 = 4s
+- Connection errors and timeouts also trigger retries
+
+---
+
 ## Section O: Job Worker (Retry Queue)
 
 ### `code/job_worker.py` -- Background Retry Processor
@@ -711,6 +766,7 @@ Runs on port 8000. Serves the React dashboard and all API endpoints.
 | `POST` | `/api/backups/{id}/restore` | Restore from backup |
 | `GET` | `/api/news` | Recent articles in DB |
 | `GET` | `/api/jobs` | Job queue status |
+| `GET` | `/api/stream/status` | SSE endpoint for real-time pipeline status (emits JSON every 5s) |
 
 #### Static File Serving
 If `bolt-dashboard/dist/` exists (built frontend), serves it at `/` with `/assets`, `/images`, `/data` mounts.
