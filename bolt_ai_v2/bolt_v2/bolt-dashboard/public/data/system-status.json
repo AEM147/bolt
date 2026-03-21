@@ -1,0 +1,49 @@
+{
+  "systemHealth": {
+    "status": "operational",
+    "uptime": "99.8%",
+    "lastUpdated": "2025-06-24T01:13:59Z"
+  },
+  "newsAggregation": {
+    "status": "active",
+    "articlesProcessed": 247,
+    "lastSync": "2025-06-24T01:05:00Z",
+    "activeSources": 17,
+    "errorRate": 2.1
+  },
+  "contentGeneration": {
+    "status": "active", 
+    "contentInQueue": 12,
+    "processingTime": "3.2 min",
+    "successRate": 94.5,
+    "dailyTarget": 25,
+    "dailyCompleted": 18
+  },
+  "videoRendering": {
+    "status": "processing",
+    "currentProgress": 67,
+    "estimatedTimeRemaining": "8 min",
+    "renderQueue": 4,
+    "gpuUtilization": 85
+  },
+  "platformPublishing": {
+    "youtube": {
+      "status": "connected",
+      "lastPublish": "2025-06-23T20:30:00Z",
+      "scheduledPosts": 3,
+      "apiQuota": 85
+    },
+    "tiktok": {
+      "status": "connected", 
+      "lastPublish": "2025-06-23T19:45:00Z",
+      "scheduledPosts": 2,
+      "apiQuota": 72
+    },
+    "instagram": {
+      "status": "connected",
+      "lastPublish": "2025-06-23T21:15:00Z", 
+      "scheduledPosts": 1,
+      "apiQuota": 91
+    }
+  }
+}

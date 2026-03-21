@@ -1,0 +1,31 @@
+# Secrets — NEVER commit these
+.env
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+
+# Runtime data
+data/queue/
+data/published/
+data/analytics/
+content/audio/
+content/video/
+content/thumbnails/
+logs/
+backups/
+
+# Node
+node_modules/
+
+# Build
+bolt-dashboard/dist/
+bolt-dashboard/.vite/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,69 @@
+{
+  "recentNews": [
+    {
+      "id": "news_001",
+      "title": "Microsoft and OpenAI Announce Revolutionary AI Partnership Expansion",
+      "source": "TechCrunch",
+      "url": "https://techcrunch.com/ai-news",
+      "publishDate": "2025-06-24T00:30:00Z",
+      "summary": "Microsoft announces a groundbreaking expansion of its partnership with OpenAI, introducing new AI capabilities that could reshape the industry landscape.",
+      "relevanceScore": 9.2,
+      "sentiment": "positive",
+      "processed": false,
+      "aiInsights": "High potential for viral content - combines major tech companies with breakthrough AI technology."
+    },
+    {
+      "id": "news_002",
+      "title": "Google's Gemini AI Achieves Human-Level Performance in Complex Reasoning",
+      "source": "Wired",
+      "url": "https://wired.com/gemini-breakthrough",
+      "publishDate": "2025-06-23T22:15:00Z", 
+      "summary": "Google's latest Gemini model demonstrates unprecedented reasoning capabilities, matching human performance on standardized tests.",
+      "relevanceScore": 8.8,
+      "sentiment": "positive",
+      "processed": true,
+      "contentGenerated": "content_draft_004",
+      "aiInsights": "Strong engagement potential - reasoning AI breakthrough appeals to tech-savvy audience."
+    },
+    {
+      "id": "news_003",
+      "title": "New Study Shows AI Bias in Hiring Algorithms Remains Widespread",
+      "source": "MIT Technology Review",
+      "url": "https://technologyreview.com/ai-bias-study",
+      "publishDate": "2025-06-23T20:45:00Z",
+      "summary": "Comprehensive research reveals persistent bias issues in AI hiring systems across major corporations.",
+      "relevanceScore": 7.5,
+      "sentiment": "negative",
+      "processed": false,
+      "aiInsights": "Important topic but may need careful framing to maintain positive brand tone."
+    },
+    {
+      "id": "news_004",
+      "title": "Tesla's FSD Beta Achieves 99% Success Rate in Urban Driving Tests",
+      "source": "The Verge",
+      "url": "https://theverge.com/tesla-fsd-milestone",
+      "publishDate": "2025-06-23T18:30:00Z",
+      "summary": "Tesla's Full Self-Driving beta reaches a major milestone with 99% success rate in complex urban driving scenarios.",
+      "relevanceScore": 8.5,
+      "sentiment": "positive", 
+      "processed": true,
+      "contentGenerated": "content_draft_005",
+      "aiInsights": "High viral potential - Tesla content performs well across all platforms."
+    }
+  ],
+  "sourceStats": [
+    {"source": "TechCrunch", "articles": 45, "processed": 38, "successRate": 84.4},
+    {"source": "Wired", "articles": 32, "processed": 29, "successRate": 90.6},
+    {"source": "MIT Technology Review", "articles": 28, "processed": 26, "successRate": 92.9},
+    {"source": "The Verge", "articles": 41, "processed": 35, "successRate": 85.4},
+    {"source": "OpenAI Blog", "articles": 12, "processed": 12, "successRate": 100.0},
+    {"source": "Google AI Blog", "articles": 18, "processed": 17, "successRate": 94.4}
+  ],
+  "pipeline": {
+    "articlesInQueue": 12,
+    "processingTime": "2.8 min avg",
+    "successRate": 89.2,
+    "errorCount": 3,
+    "lastError": "2025-06-23T16:22:00Z"
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "overview": {
+    "totalViews": 2847592,
+    "totalLikes": 145832,
+    "totalComments": 23847,
+    "totalShares": 8932,
+    "engagementRate": 6.2,
+    "subscriberGrowth": 12.5,
+    "reachGrowth": 8.9
+  },
+  "platformStats": {
+    "youtube": {
+      "views": 1254783,
+      "likes": 67432,
+      "comments": 12394,
+      "shares": 4521,
+      "subscribers": 89340,
+      "watchTime": "45,892 hours",
+      "avgViewDuration": "1:42"
+    },
+    "tiktok": {
+      "views": 987234,
+      "likes": 52341,
+      "comments": 8932,
+      "shares": 3201,
+      "followers": 124560,
+      "avgViewDuration": "0:35"
+    },
+    "instagram": {
+      "views": 605575,
+      "likes": 26059,
+      "comments": 2521,
+      "shares": 1210,
+      "followers": 45780,
+      "avgViewDuration": "0:28"
+    }
+  },
+  "weeklyStats": [
+    {"date": "2025-06-17", "views": 45230, "likes": 2340, "comments": 420, "shares": 180},
+    {"date": "2025-06-18", "views": 52180, "likes": 2780, "comments": 520, "shares": 210},
+    {"date": "2025-06-19", "views": 48950, "likes": 2520, "comments": 480, "shares": 195},
+    {"date": "2025-06-20", "views": 61230, "likes": 3210, "comments": 640, "shares": 250},
+    {"date": "2025-06-21", "views": 58740, "likes": 3050, "comments": 590, "shares": 240},
+    {"date": "2025-06-22", "views": 54320, "likes": 2890, "comments": 540, "shares": 220},
+    {"date": "2025-06-23", "views": 62450, "likes": 3340, "comments": 670, "shares": 280}
+  ],
+  "topContent": [
+    {
+      "id": "content_001",
+      "title": "Breaking: OpenAI Announces GPT-5 Release Date",
+      "platform": "youtube",
+      "views": 89234,
+      "likes": 4521,
+      "comments": 892,
+      "shares": 234,
+      "publishDate": "2025-06-22T10:30:00Z",
+      "thumbnail": "/images/thumbnail_template.png"
+    },
+    {
+      "id": "content_002", 
+      "title": "Google's New AI Can Code Better Than Humans",
+      "platform": "tiktok",
+      "views": 76543,
+      "likes": 3890,
+      "comments": 567,
+      "shares": 189,
+      "publishDate": "2025-06-21T14:15:00Z",
+      "thumbnail": "/images/thumbnail_template.png"
+    },
+    {
+      "id": "content_003",
+      "title": "Meta's AI Revolution: What You Need to Know",
+      "platform": "instagram", 
+      "views": 54321,
+      "likes": 2734,
+      "comments": 342,
+      "shares": 156,
+      "publishDate": "2025-06-20T16:45:00Z",
+      "thumbnail": "/images/thumbnail_template.png"
+    }
+  ]
+}

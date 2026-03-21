@@ -1,0 +1,127 @@
+version: "3.9"
+
+# ════════════════════════════════════════════════════════════════
+#  Bolt AI Content Creator — docker-compose.yml v2.2
+#
+#  Quick start:
+#    cp .env.example .env && nano .env     # Add your API keys
+#    docker-compose up                     # Start everything
+#
+#  Individual services:
+#    docker-compose up api                 # API only
+#    docker-compose up pipeline            # Scheduler only
+#    docker-compose up worker              # Job worker only
+#    docker-compose --profile dev up       # Include frontend dev server
+#
+#  Logs:
+#    docker-compose logs -f api
+#    docker-compose logs -f pipeline
+#    docker-compose logs -f worker
+#
+#  Production:
+#    docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# ════════════════════════════════════════════════════════════════
+
+services:
+
+  # ── FastAPI Backend (port 8000) ─────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bolt-api
+    command: uvicorn code.api:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./code:/app/code
+      - bolt_data:/app/data
+      - bolt_content:/app/content
+      - bolt_logs:/app/logs
+      - bolt_backups:/app/backups
+      - ./assets:/app/assets:ro
+      - ./.env:/app/.env:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - BOLT_ENV=development
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  # ── Pipeline Scheduler (runs pipeline at 06:00 UTC daily) ───
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bolt-pipeline
+    command: python3 code/content_automation_master.py --schedule
+    volumes:
+      - ./code:/app/code
+      - bolt_data:/app/data
+      - bolt_content:/app/content
+      - bolt_logs:/app/logs
+      - bolt_backups:/app/backups
+      - ./assets:/app/assets:ro
+      - ./.env:/app/.env:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - BOLT_ENV=development
+    env_file:
+      - .env
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Job Worker (processes retry queue every 60s) ─────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bolt-worker
+    command: python3 code/job_worker.py
+    volumes:
+      - ./code:/app/code
+      - bolt_data:/app/data
+      - bolt_content:/app/content
+      - bolt_logs:/app/logs
+      - bolt_backups:/app/backups
+      - ./.env:/app/.env:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Frontend Dev Server (port 5173) — dev profile only ───────
+  frontend:
+    image: node:20-alpine
+    container_name: bolt-frontend
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./bolt-dashboard:/app
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - api
+    profiles:
+      - dev
+
+# ── Named volumes (persist across container restarts) ─────────
+volumes:
+  bolt_data:
+  bolt_content:
+  bolt_logs:
+  bolt_backups:
