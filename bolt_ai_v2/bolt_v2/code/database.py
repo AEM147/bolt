@@ -188,6 +188,22 @@ class BoltDB:
         with _get_conn(self.db_path) as conn:
             conn.executescript(SCHEMA)
 
+    @contextmanager
+    def _get_conn_ctx(self):
+        """Context manager for raw SQL queries. Properly closes connections."""
+        conn = sqlite3.connect(str(self.db_path), timeout=30)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
     # ── Articles ─────────────────────────────────────────────────────────
 
     def save_article(self, article: dict) -> int:

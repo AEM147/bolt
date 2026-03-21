@@ -394,18 +394,7 @@ async def restore_backup(backup_id: str):
 async def get_news(status: Optional[str] = None, limit: int = 50):
     """Recent news articles from the DB."""
     db = get_db()
-    with db._get_conn_ctx() as conn:
-        if status:
-            rows = conn.execute(
-                "SELECT * FROM articles WHERE status=? ORDER BY fetched_at DESC LIMIT ?",
-                (status, limit)
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM articles ORDER BY claude_score DESC, fetched_at DESC LIMIT ?",
-                (limit,)
-            ).fetchall()
-        articles = [dict(r) for r in rows]
+    articles = db.get_recent_articles(limit=limit, status=status)
     return {"articles": articles, "total": len(articles)}
 
 
@@ -447,27 +436,8 @@ async def spa_fallback(path: str):
     raise HTTPException(status_code=404)
 
 
-# ── Add _get_conn_ctx to BoltDB ────────────────────────────────────────────
-# Proper context manager that closes connections after use
-from contextlib import contextmanager
-import sqlite3
-
-@contextmanager
-def _get_conn_ctx(self):
-    conn = sqlite3.connect(str(self.db_path), timeout=30)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-
-BoltDB._get_conn_ctx = _get_conn_ctx
+# _get_conn_ctx is now a proper method on BoltDB in database.py
+# No monkeypatching needed
 
 
 if __name__ == "__main__":
