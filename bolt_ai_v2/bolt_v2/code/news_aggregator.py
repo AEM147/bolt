@@ -167,6 +167,7 @@ def claude_batch_score(articles: list[dict], config: dict) -> list[dict]:
         logger.warning("No Anthropic API key — skipping Claude scoring")
         for a in articles:
             a["claude_score"] = a.get("heuristic_score", 5.0)
+            a["pillar"] = "ai_news"
             a["content_pillar"] = "ai_news"
             a["claude_hook_idea"] = ""
         return articles
@@ -212,16 +213,19 @@ Respond ONLY with valid JSON in this exact format:
         for i, a in enumerate(articles):
             if i < len(scores):
                 a["claude_score"] = scores[i]["score"]
-                a["content_pillar"] = scores[i].get("pillar", "ai_news")
+                a["pillar"] = scores[i].get("pillar", "ai_news")
+                a["content_pillar"] = a["pillar"]  # backward compat
                 a["claude_hook_idea"] = scores[i].get("hook", "")
             else:
                 a["claude_score"] = a.get("heuristic_score", 5.0)
+                a["pillar"] = "ai_news"
                 a["content_pillar"] = "ai_news"
                 a["claude_hook_idea"] = ""
     except Exception as e:
         logger.error(f"Claude scoring failed: {e}. Using heuristic scores.")
         for a in articles:
             a["claude_score"] = a.get("heuristic_score", 5.0)
+            a["pillar"] = "ai_news"
             a["content_pillar"] = "ai_news"
             a["claude_hook_idea"] = ""
     return articles

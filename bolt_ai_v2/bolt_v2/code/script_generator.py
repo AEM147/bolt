@@ -240,15 +240,26 @@ def save_script_to_queue(article: dict, script_result: dict, captions: dict, con
                     script_result["quality"]["overall_score"],
                     config.get("automation",{}).get("auto_publish_threshold",8.5) - 0.1
                 )
+    except ImportError:
+        logger.debug("Content validator not available -- skipping validation")
     except Exception as e:
-        logger.debug(f"Validator unavailable: {e}")
+        logger.warning(f"Content validation error (non-fatal): {e}")
 
     """Write fully generated content package to the queue."""
     queue_dir = Path(config["paths"]["queue"])
     content_id = f"bolt_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-    threshold = config["automation"]["auto_publish_threshold"]
     score = script_result["quality"].get("overall_score", 0)
-    auto_approve = config["automation"]["auto_publish_enabled"] and score >= threshold
+
+    # Auto-approve logic:
+    # 1. If score >= quality_gate.auto_approve_above (default 9.0), auto-approve regardless
+    # 2. If auto_publish_enabled AND score >= auto_publish_threshold (8.5), auto-approve
+    # 3. Otherwise, queue for human review
+    qg_auto_approve = config.get("quality_gate", {}).get("auto_approve_above", 9.0)
+    threshold = config["automation"]["auto_publish_threshold"]
+    auto_approve = (
+        score >= qg_auto_approve
+        or (config["automation"]["auto_publish_enabled"] and score >= threshold)
+    )
 
     package = {
         "content_id": content_id,

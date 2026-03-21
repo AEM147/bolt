@@ -270,6 +270,7 @@
     "track_elevenlabs": true,
     "track_google_tts": true,
     "monthly_budget_alert": 10.0,
+    "daily_budget_alert": 3.0,
     "per_video_budget_alert": 0.5,
     "pricing_usd": {
       "_note": "Edit these values whenever Claude or other providers update pricing. No code changes needed.",

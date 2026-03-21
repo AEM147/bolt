@@ -22,27 +22,40 @@ def load_config(path: str = "code/config.json") -> dict:
 
 
 # ─────────────────────────────────────────────
-# DISCORD NOTIFICATIONS
+# NOTIFICATIONS (uses centralized NotificationManager)
 # ─────────────────────────────────────────────
 
 def notify_discord(message: str, color: int, config: dict, fields: list = None) -> None:
-    """Send a rich Discord embed notification."""
-    webhook_url = config["apis"].get("discord_webhook_url", "")
-    if not webhook_url or webhook_url.startswith("YOUR_"):
-        return
-    embed = {
-        "title": "⚡ Bolt Automation",
-        "description": message,
-        "color": color,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "footer": {"text": "Bolt AI Content Creator"},
-    }
-    if fields:
-        embed["fields"] = fields
+    """Send a notification via the centralized notification system.
+    Falls back to direct Discord webhook if NotificationManager is unavailable."""
     try:
-        requests.post(webhook_url, json={"embeds": [embed]}, timeout=10)
-    except Exception as e:
-        logger.warning(f"Discord notify failed: {e}")
+        from notifications import NotificationManager, Notification, NotificationLevel
+        level = NotificationLevel.INFO if color == 0x00FF00 else (
+            NotificationLevel.WARNING if color == 0xFFAA00 else NotificationLevel.ERROR
+        )
+        nm = NotificationManager(config)
+        metadata = {}
+        if fields:
+            metadata = {f["name"]: f["value"] for f in fields}
+        nm.send(Notification(title="Bolt Automation", message=message, level=level, metadata=metadata))
+    except Exception:
+        # Direct fallback if notifications module is unavailable
+        webhook_url = config.get("apis", {}).get("discord_webhook_url", "")
+        if not webhook_url or webhook_url.startswith("YOUR_"):
+            return
+        embed = {
+            "title": "Bolt Automation",
+            "description": message,
+            "color": color,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "footer": {"text": "Bolt AI Content Creator"},
+        }
+        if fields:
+            embed["fields"] = fields
+        try:
+            requests.post(webhook_url, json={"embeds": [embed]}, timeout=10)
+        except Exception as e:
+            logger.warning(f"Discord notify failed: {e}")
 
 
 # ─────────────────────────────────────────────
