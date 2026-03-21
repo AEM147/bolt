@@ -761,7 +761,7 @@ Configurable via `BOLT_CORS_ORIGINS` env var (comma-separated). Defaults to loca
 | `NewsMonitor.tsx` | `/news` | RSS feed viewer with Claude scores, source reliability |
 | `PlatformManagement.tsx` | `/platforms` | YouTube/TikTok/Instagram config, posting schedule, connection status |
 | `CostBackups.tsx` | `/costs` | Monthly cost breakdown by service, backup list with restore buttons |
-| `Settings.tsx` | `/settings` | Config editor, API key status, automation toggles |
+| `Settings.tsx` | `/settings` | Config editor, API key status, automation toggles (**local-only -- no backend save endpoint yet**) |
 
 ### `src/lib/api.ts` -- API Client
 

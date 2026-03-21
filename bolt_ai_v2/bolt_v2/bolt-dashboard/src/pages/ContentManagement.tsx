@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { CheckCircle, XCircle, Clock, Eye, Edit3, Send, RotateCcw, Zap } from 'lucide-react'
+import { api } from '../lib/api'
 
 type Status = 'pending_review' | 'approved' | 'published' | 'rejected'
 
@@ -84,17 +85,30 @@ export default function ContentManagement() {
   const [selected, setSelected] = useState<ContentItem | null>(null)
   const [filter, setFilter] = useState<'all' | Status>('all')
 
+  // Load real scripts from API on mount; fall back to demo data if backend unavailable
+  useEffect(() => {
+    api.scripts()
+      .then((data: any) => {
+        if (Array.isArray(data) && data.length > 0) setItems(data)
+      })
+      .catch(() => {
+        // Backend unavailable -- keep demo items for static preview
+        fetch('/data/content.json').then(r => r.json()).then((data: any) => {
+          if (Array.isArray(data) && data.length > 0) setItems(data)
+        }).catch(() => {})
+      })
+  }, [])
+
   const filtered = filter === 'all' ? items : items.filter(i => i.status === filter)
 
   const approve = async (id: string) => {
     // Update local state immediately for instant UI feedback
     setItems(prev => prev.map(i => i.content_id === id ? { ...i, status: 'approved' } : i))
     if (selected?.content_id === id) setSelected(prev => prev ? { ...prev, status: 'approved' } : null)
-    // Write HITL flag file via the pipeline's local API (if running locally) or show instructions
     try {
-      await fetch(`/api/hitl/approve/${id}`, { method: 'POST' })
+      await api.approve(id)
     } catch {
-      // Dashboard running statically — show CLI instruction
+      // Dashboard running statically -- show CLI instruction
       console.info(`To approve via CLI: python hitl.py approve ${id}`)
     }
   }
@@ -102,7 +116,7 @@ export default function ContentManagement() {
     setItems(prev => prev.map(i => i.content_id === id ? { ...i, status: 'rejected' } : i))
     if (selected?.content_id === id) setSelected(prev => prev ? { ...prev, status: 'rejected' } : null)
     try {
-      await fetch(`/api/hitl/reject/${id}`, { method: 'POST' })
+      await api.reject(id)
     } catch {
       console.info(`To reject via CLI: python hitl.py reject ${id}`)
     }
