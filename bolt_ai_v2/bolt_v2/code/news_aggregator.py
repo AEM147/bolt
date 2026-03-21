@@ -70,11 +70,22 @@ def deduplicate(articles: list[dict], seen_hashes: set) -> list[dict]:
 
 
 async def fetch_feed(session: aiohttp.ClientSession, name: str, info: dict) -> list[dict]:
-    """Fetch a single RSS feed and return parsed articles."""
+    """Fetch a single RSS feed with caching and return parsed articles.
+    
+    Uses http_utils.async_cached_get for disk caching (avoids re-fetching
+    the same RSS content within the cache TTL) and per-host rate limiting.
+    """
     articles = []
     try:
-        async with session.get(info["url"], timeout=aiohttp.ClientTimeout(total=10)) as resp:
-            text = await resp.text()
+        try:
+            from http_utils import async_cached_get
+            text = await async_cached_get(session, info["url"], cache_ttl_hours=1.0, timeout_s=10)
+        except ImportError:
+            # Fallback if http_utils not available
+            async with session.get(info["url"], timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                text = await resp.text()
+        if not text:
+            return articles
         feed = feedparser.parse(text)
         for entry in feed.entries:
             title = getattr(entry, "title", "").strip()
