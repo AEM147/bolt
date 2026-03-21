@@ -188,7 +188,7 @@ Bolt AI Content Creator
 <body style="font-family: Arial, sans-serif;">
     <h2 style="color: #0047AB;">{notification.title}</h2>
     <hr>
-    <p>{notification.message.replace('\n', '<br>')}</p>
+    <p>{notification.message.replace(chr(10), '<br>')}</p>
     <hr>
     <p style="color: #666; font-size: 12px;">
         Bolt AI Content Creator<br>
