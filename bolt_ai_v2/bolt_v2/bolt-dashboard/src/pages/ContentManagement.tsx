@@ -89,12 +89,35 @@ export default function ContentManagement() {
   useEffect(() => {
     api.scripts()
       .then((data: any) => {
-        if (Array.isArray(data) && data.length > 0) setItems(data)
+        // API returns { scripts: [...], total: N } -- unwrap the array
+        const scripts = Array.isArray(data) ? data : data?.scripts
+        if (Array.isArray(scripts) && scripts.length > 0) {
+          // Normalise DB rows into the shape ContentItem expects
+          const normalised: ContentItem[] = scripts.map((s: any) => ({
+            content_id: s.content_id,
+            article: s.article || { title: s.script?.slice(0, 60) || 'Untitled', source: s.pillar || '' },
+            pillar: s.pillar || 'ai_news',
+            script: s.script || '',
+            quality: s.quality || {
+              overall_score: s.overall_score || 0,
+              hook_strength: s.hook_strength || 0,
+              simplicity: s.simplicity || 0,
+              bolt_voice: s.bolt_voice || 0,
+              word_count: s.word_count || 0,
+            },
+            captions: s.captions || {},
+            status: s.status as Status,
+            generated_at: s.generated_at || '',
+            auto_approved: s.auto_approved === 1 || s.auto_approved === true,
+          }))
+          setItems(normalised)
+        }
       })
       .catch(() => {
-        // Backend unavailable -- keep demo items for static preview
+        // Backend unavailable -- try static JSON, then keep demo items
         fetch('/data/content.json').then(r => r.json()).then((data: any) => {
-          if (Array.isArray(data) && data.length > 0) setItems(data)
+          const scripts = Array.isArray(data) ? data : data?.scripts
+          if (Array.isArray(scripts) && scripts.length > 0) setItems(scripts)
         }).catch(() => {})
       })
   }, [])

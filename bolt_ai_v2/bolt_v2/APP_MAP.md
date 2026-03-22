@@ -80,8 +80,11 @@ bolt_v2/
 |-- pytest.ini                # Test runner configuration
 |-- requirements.txt          # Python dependencies
 |
+|-- pyproject.toml             # Python project config (ruff, mypy, pytest)
+|
 |-- code/                     # ===== PYTHON BACKEND =====
-|   |-- shared_config.py      # Centralized config loader (new)
+|   |-- __init__.py           # Package init (enables clean imports)
+|   |-- shared_config.py      # Centralized config loader
 |   |-- secrets_manager.py    # .env / env var secret injection
 |   |-- config.json           # Application configuration (non-secret)
 |   |-- content_automation_master.py  # Main orchestrator + scheduler

@@ -145,6 +145,14 @@ CREATE TABLE IF NOT EXISTS jobs (
     updated_at   TEXT NOT NULL
 );
 
+-- Persistent article deduplication across pipeline runs
+CREATE TABLE IF NOT EXISTS article_hashes (
+    hash       TEXT PRIMARY KEY,
+    title      TEXT NOT NULL,
+    source     TEXT,
+    first_seen TEXT NOT NULL
+);
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_scripts_status   ON scripts(status);
 CREATE INDEX IF NOT EXISTS idx_scripts_score    ON scripts(overall_score);
@@ -152,6 +160,7 @@ CREATE INDEX IF NOT EXISTS idx_publications_pid ON publications(content_id, plat
 CREATE INDEX IF NOT EXISTS idx_cost_service     ON cost_events(service, recorded_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_status      ON jobs(status, next_run_at);
 CREATE INDEX IF NOT EXISTS idx_articles_status  ON articles(status, fetched_at);
+CREATE INDEX IF NOT EXISTS idx_article_hashes_seen ON article_hashes(first_seen);
 """
 
 
@@ -261,6 +270,54 @@ class BoltDB:
     def mark_article_used(self, article_id: int) -> None:
         with _get_conn(self.db_path) as conn:
             conn.execute("UPDATE articles SET status='used' WHERE id=?", (article_id,))
+
+    # ── Article deduplication (persistent across runs) ────────────────────
+
+    def has_article_hash(self, hash_hex: str) -> bool:
+        """Check if an article title hash already exists in the DB."""
+        with _get_conn(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT 1 FROM article_hashes WHERE hash=?", (hash_hex,)
+            ).fetchone()
+            return row is not None
+
+    def get_seen_hashes(self) -> set:
+        """Load all known article hashes into a set for batch dedup."""
+        with _get_conn(self.db_path) as conn:
+            rows = conn.execute("SELECT hash FROM article_hashes").fetchall()
+            return {r["hash"] for r in rows}
+
+    def store_article_hashes(self, articles: list[dict]) -> int:
+        """
+        Store title hashes for a batch of articles.
+        Returns the number of new hashes stored.
+        """
+        import hashlib
+        now = datetime.now(timezone.utc).isoformat()
+        stored = 0
+        with _get_conn(self.db_path) as conn:
+            for a in articles:
+                h = hashlib.md5(a["title"].lower().strip().encode()).hexdigest()
+                try:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO article_hashes (hash, title, source, first_seen) VALUES (?,?,?,?)",
+                        (h, a["title"], a.get("source", ""), now),
+                    )
+                    stored += 1
+                except Exception:
+                    pass
+        return stored
+
+    def prune_old_hashes(self, max_age_days: int = 30) -> int:
+        """Remove hashes older than max_age_days to prevent unbounded growth."""
+        from datetime import timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+        with _get_conn(self.db_path) as conn:
+            cur = conn.execute("DELETE FROM article_hashes WHERE first_seen < ?", (cutoff,))
+            deleted = cur.rowcount
+            if deleted:
+                logger.info(f"Pruned {deleted} old article hashes (>{max_age_days}d)")
+            return deleted
 
     # ── Scripts ──────────────────────────────────────────────────────────
 
