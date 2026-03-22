@@ -262,7 +262,9 @@ def run_video_pipeline(package, config):
         logger.info(f"Resuming video pipeline from status={existing['status']}", extra={"content_id": cid})
 
     # ── Sub-step 1: Voice synthesis ──
-    if existing and existing.get("audio_path") and existing["status"] in ("audio_ready", "avatar_ready"):
+    if (existing and existing.get("audio_path")
+            and existing["status"] in ("audio_ready", "avatar_ready")
+            and Path(existing["audio_path"]).exists()):
         audio = existing["audio_path"]
         audio_provider = existing.get("audio_provider", "edge_tts")
         logger.info(f"Skipping voice synthesis -- resuming with existing audio", extra={"content_id": cid})
@@ -282,7 +284,9 @@ def run_video_pipeline(package, config):
     package["audio_provider"] = audio_provider
 
     # ── Sub-step 2: Avatar generation ──
-    if existing and existing.get("avatar_path") and existing["status"] == "avatar_ready":
+    if (existing and existing.get("avatar_path")
+            and existing["status"] == "avatar_ready"
+            and Path(existing["avatar_path"]).exists()):
         avatar = existing["avatar_path"]
         avatar_provider = existing.get("avatar_provider")
         logger.info(f"Skipping avatar generation -- resuming with existing avatar", extra={"content_id": cid})

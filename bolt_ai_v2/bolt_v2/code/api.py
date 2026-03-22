@@ -486,9 +486,15 @@ async def stream_status():
                 monthly = tracker.get_monthly_summary()
                 pending_hitl = list_pending()
 
+                # Check running status from job queue (replaces removed _pipeline_running global)
+                with db._get_conn_ctx() as conn:
+                    running_count = conn.execute(
+                        "SELECT COUNT(*) FROM jobs WHERE status='running'"
+                    ).fetchone()[0]
+
                 payload = {
                     "ts":             datetime.now(timezone.utc).isoformat(),
-                    "pipeline_running": _pipeline_running,
+                    "pipeline_running": running_count > 0,
                     "pending_review":  summary["pending_review"],
                     "failed_jobs":     summary["failed_jobs"],
                     "total_published": summary["total_published"],
