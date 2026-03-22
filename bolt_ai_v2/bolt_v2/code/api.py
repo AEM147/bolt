@@ -274,13 +274,16 @@ async def get_script(content_id: str):
 async def hitl_approve(content_id: str, body: HITLDecision = HITLDecision()):
     """
     Approve a script from the dashboard.
-    Creates the flag file that the pipeline daemon is polling for.
+    Creates a video job so the job worker picks it up -- the scheduler
+    never blocks waiting for approval (pre-plan Rule 3).
     """
     db = get_db()
     ok = approve_from_dashboard(content_id)
     db.approve_script(content_id)
-    logger.info("HITL approved via dashboard", extra={"content_id": content_id})
-    return {"success": ok, "content_id": content_id, "action": "approved"}
+    # Create a video job so the job worker continues the pipeline
+    db.enqueue_job("video", content_id=content_id, max_attempts=3)
+    logger.info("HITL approved via dashboard -- video job created", extra={"content_id": content_id})
+    return {"success": ok, "content_id": content_id, "action": "approved", "video_job_created": True}
 
 
 @app.post("/api/hitl/reject/{content_id}")
@@ -301,64 +304,46 @@ async def get_hitl_pending():
 
 # ── Pipeline control ───────────────────────────────────────────────────────
 
-_pipeline_running = False
-
 @app.post("/api/pipeline/run")
-async def trigger_pipeline(background_tasks: BackgroundTasks):
-    """Trigger a full pipeline run in the background."""
-    global _pipeline_running
-    if _pipeline_running:
-        return {"status": "already_running", "message": "Pipeline is already running"}
+async def trigger_pipeline():
+    """
+    Trigger a full pipeline run by creating a job.
 
-    async def _run():
-        global _pipeline_running
-        _pipeline_running = True
-        try:
-            from content_automation_master import run_full_pipeline
-            await run_full_pipeline()
-        finally:
-            _pipeline_running = False
-
-    background_tasks.add_task(_run)
-    return {"status": "started", "message": "Pipeline started in background"}
+    Pre-plan Layer 6 rule: the API server never imports pipeline modules.
+    It writes a job to the DB and the job worker picks it up.
+    """
+    db = get_db()
+    db.enqueue_job("pipeline_full", max_attempts=1)
+    logger.info("Full pipeline job created via API")
+    return {"status": "queued", "message": "Pipeline job created -- job worker will pick it up"}
 
 
 @app.post("/api/pipeline/{step}")
-async def trigger_step(step: str, background_tasks: BackgroundTasks):
-    """Trigger a specific pipeline step."""
+async def trigger_step(step: str):
+    """
+    Trigger a specific pipeline step by creating a job.
+
+    Pre-plan Layer 6: API writes to DB, never runs pipeline code.
+    """
     valid_steps = ["news", "script", "video", "publish", "analytics"]
     if step not in valid_steps:
         raise HTTPException(status_code=400, detail=f"Invalid step. Must be one of: {valid_steps}")
 
-    async def _run_step():
-        from content_automation_master import (
-            step_news, step_script, step_video, step_publish, step_analytics,
-            get_notifier, CONFIG as cfg
-        )
-        from cost_tracker import CostTracker
-        from observability import get_rate_limiter
-        notifier = get_notifier()
-        tracker  = CostTracker()
-
-        class _CB:
-            def is_open(self, s): return False
-            def record_failure(self, s): pass
-            def record_success(self, s): pass
-
-        cb = _CB()
-        if step == "news":    await step_news(notifier, cb, tracker)
-        elif step == "script": step_script(notifier, cb, tracker)
-        elif step == "video":  step_video(notifier, cb, tracker)
-        elif step == "publish": step_publish(notifier, cb, tracker)
-        elif step == "analytics": step_analytics(notifier, tracker)
-
-    background_tasks.add_task(_run_step)
-    return {"status": "started", "step": step}
+    db = get_db()
+    db.enqueue_job(step, max_attempts=3)
+    logger.info(f"Pipeline step job created via API", extra={"step": step})
+    return {"status": "queued", "step": step}
 
 
 @app.get("/api/pipeline/status")
 async def pipeline_status():
-    return {"running": _pipeline_running}
+    """Pipeline status based on job queue state."""
+    db = get_db()
+    with db._get_conn_ctx() as conn:
+        running = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE status='running'"
+        ).fetchone()[0]
+    return {"running": running > 0, "running_jobs": running}
 
 
 # ── Costs ──────────────────────────────────────────────────────────────────

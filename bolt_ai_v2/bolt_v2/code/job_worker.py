@@ -130,6 +130,25 @@ async def run_job(job: dict, config: dict) -> bool:
             result = backup.create_backup("retry")
             return bool(result)
 
+        elif job_type == "pipeline_full":
+            # Full pipeline triggered from API -- run all steps in sequence
+            ok = await step_news(notifier, cb, tracker)
+            if ok:
+                result = step_script(notifier, cb, tracker)
+                if result and result.get("auto_approved"):
+                    try:
+                        BudgetEnforcer(config).check_or_raise("video")
+                    except BudgetExceededError:
+                        logger.warning("Budget exceeded in pipeline_full -- deferring video")
+                        db = get_db()
+                        db.enqueue_job("video", content_id=result["content_id"], max_attempts=3)
+                        return True
+                    video = step_video(notifier, cb, tracker)
+                    if video and (video.get("video_ready") or video.get("audio_path")):
+                        step_publish(notifier, cb, tracker)
+                    step_analytics(notifier, tracker)
+            return ok
+
         else:
             logger.warning(f"Unknown job type: {job_type}")
             return False
@@ -145,10 +164,13 @@ async def run_job(job: dict, config: dict) -> bool:
 
 def get_retry_delay(attempt: int) -> int:
     """
-    Exponential backoff with jitter.
-    Attempt 1 → 5 min, Attempt 2 → 15 min, Attempt 3 → 45 min
+    Pre-plan escalating backoff:
+      Attempt 1 -> 5 min
+      Attempt 2 -> 30 min
+      Attempt 3 -> 2 hours
+      Beyond    -> 2 hours (will hit max_attempts and dead-letter)
     """
-    base_delays = [300, 900, 2700, 7200]   # seconds
+    base_delays = [300, 1800, 7200]   # 5m, 30m, 2h per pre-plan
     import random
     delay = base_delays[min(attempt, len(base_delays) - 1)]
     jitter = random.randint(-30, 30)
@@ -207,12 +229,13 @@ async def process_queue(config: dict) -> int:
         else:
             next_attempt = attempt + 1
             if next_attempt >= job["max_attempts"]:
-                # Dead-letter it
+                # Dead-letter it -- write to both DB table and JSON file
                 with db._get_conn_ctx() as conn:
                     conn.execute(
                         "UPDATE jobs SET status='dead', updated_at=? WHERE id=?",
                         (datetime.now(timezone.utc).isoformat(), job_id)
                     )
+                db.save_dead_letter(job)
                 write_dead_letter(job)
 
                 # Notify
