@@ -266,9 +266,25 @@ async def run(config_path: str = "code/config.json") -> list[dict]:
     # 1. Fetch all feeds concurrently
     raw = await fetch_all_feeds(config)
 
-    # 2. Deduplicate
-    seen: set = set()
+    # 2. Deduplicate -- use persistent hashes from the DB so the same story
+    #    is never processed twice across pipeline runs (pre-plan rule).
+    try:
+        from database import get_db
+        db = get_db()
+        seen: set = db.get_seen_hashes()
+        logger.info(f"Loaded {len(seen)} persistent article hashes from DB")
+    except Exception as e:
+        logger.warning(f"Could not load persistent hashes ({e}), using in-memory set")
+        seen = set()
+
     raw = deduplicate(raw, seen)
+
+    # Persist new hashes so subsequent runs skip these articles
+    try:
+        db.store_article_hashes(raw)
+        db.prune_old_hashes(max_age_days=30)
+    except Exception:
+        pass  # non-critical -- dedup still works in-memory for this run
 
     # 3. Pre-filter by AI relevance + recency
     filtered = pre_filter(raw)

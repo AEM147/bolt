@@ -80,8 +80,11 @@ bolt_v2/
 |-- pytest.ini                # Test runner configuration
 |-- requirements.txt          # Python dependencies
 |
+|-- pyproject.toml             # Python project config (ruff, mypy, pytest)
+|
 |-- code/                     # ===== PYTHON BACKEND =====
-|   |-- shared_config.py      # Centralized config loader (new)
+|   |-- __init__.py           # Package init (enables clean imports)
+|   |-- shared_config.py      # Centralized config loader
 |   |-- secrets_manager.py    # .env / env var secret injection
 |   |-- config.json           # Application configuration (non-secret)
 |   |-- content_automation_master.py  # Main orchestrator + scheduler
@@ -164,11 +167,15 @@ bolt_v2/
 |-- scripts/
 |   |-- setup.sh              # One-command project setup
 |
-|-- tests/                    # ===== TEST SUITE =====
+|-- tests/                    # ===== TEST SUITE (53 tests) =====
 |   |-- conftest.py           # Shared fixtures
 |   |-- test_budget_enforcer.py
+|   |-- test_content_extractor.py
 |   |-- test_database.py
+|   |-- test_llm_pool.py
 |   |-- test_news_aggregator.py
+|   |-- test_news_source_prober.py
+|   |-- test_persistent_dedup.py  # Persistent article dedup tests
 |   |-- test_quality_gate.py
 |
 |-- logs/                     # Structured JSON logs (runtime)
@@ -211,7 +218,7 @@ Lists all required/optional env vars grouped by service:
 - Avatar: `VIDNOZ_API_KEY`, `DID_API_KEY`
 - Publishing: `BUFFER_ACCESS_TOKEN`, `YOUTUBE_CLIENT_*`, `TIKTOK_ACCESS_TOKEN`, `INSTAGRAM_*`
 - Notifications: `DISCORD_WEBHOOK_URL`, `TELEGRAM_BOT_TOKEN`, `EMAIL_*`
-- App: `BOLT_CORS_ORIGINS`, `BOLT_BASE_PATH`
+- App: `BOLT_API_KEY` (API auth), `BOLT_CORS_ORIGINS`, `BOLT_BASE_PATH`
 
 ---
 
@@ -280,7 +287,8 @@ Fetches 17 RSS feeds concurrently, scores articles, sends top candidates to Clau
 ```
 17 RSS feeds --[concurrent fetch]--> raw articles
     --> filter by age (<72h) and AI relevance
-    --> deduplicate by title hash
+    --> deduplicate by title hash (persistent -- hashes stored in SQLite article_hashes table)
+    --> new hashes persisted to DB, old hashes pruned (>30 days)
     --> heuristic scoring (reliability * timeliness)
     --> top 15 sent to Claude for editorial scoring (0-10)
     --> top 5 written to data/queue/ and returned
@@ -558,6 +566,7 @@ WAL mode enabled, foreign keys enforced.
 
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
+| `article_hashes` | Persistent dedup hashes | `hash` (PK), `title`, `source`, `first_seen` |
 | `articles` | Fetched news articles | `source`, `title`, `claude_score`, `heuristic_score`, `status` |
 | `scripts` | Generated scripts | `content_id` (unique), `script`, `overall_score`, `status`, `auto_approved` |
 | `videos` | Video pipeline output | `content_id` (FK), `audio_path`, `avatar_path`, `final_path`, `video_ready` |
@@ -570,6 +579,7 @@ WAL mode enabled, foreign keys enforced.
 
 | Method Group | Methods |
 |-------------|---------|
+| Article Dedup | `has_article_hash()`, `get_seen_hashes()`, `store_article_hashes()`, `prune_old_hashes()` |
 | Articles | `save_article()`, `save_articles()`, `get_recent_articles()`, `get_top_article()`, `mark_article_used()` |
 | Scripts | `save_script()`, `get_scripts()`, `get_script_by_content_id()`, `get_pending_script()`, `approve_script()`, `reject_script()` |
 | Videos | `save_video()` |
@@ -771,6 +781,11 @@ Runs on port 8000. Serves the React dashboard and all API endpoints.
 #### Static File Serving
 If `bolt-dashboard/dist/` exists (built frontend), serves it at `/` with `/assets`, `/images`, `/data` mounts.
 
+#### Authentication
+API key-based auth via `X-API-Key` header. Controlled by `BOLT_API_KEY` env var:
+- **Set**: All `/api/*` endpoints require the header (except `/api/health`, `/api/docs`, `/api/stream/status`)
+- **Unset**: Auth disabled (local development mode)
+
 #### CORS
 Configurable via `BOLT_CORS_ORIGINS` env var (comma-separated). Defaults to localhost dev ports.
 
@@ -820,6 +835,8 @@ Configurable via `BOLT_CORS_ORIGINS` env var (comma-separated). Defaults to loca
 | `Settings.tsx` | `/settings` | Config editor, API key status, automation toggles (**local-only -- no backend save endpoint yet**) |
 
 ### `src/lib/api.ts` -- API Client
+
+Configurable via `VITE_API_URL` (base URL) and `VITE_API_KEY` (auth header). When `VITE_API_KEY` is set, all requests include `X-API-Key` header.
 
 All backend calls in one object:
 
@@ -884,15 +901,19 @@ testpaths = tests
 pythonpath = code
 ```
 
-### Test Files
+### Test Files (53 tests total)
 
 | File | Coverage |
 |------|----------|
 | `conftest.py` | Shared fixtures: `sample_config`, `sample_config_file`, `temp_db`, `sample_article`, `sample_script` |
-| `test_budget_enforcer.py` | Default limits, config overrides, monthly/daily hard stop raises, under-budget passes |
-| `test_news_aggregator.py` | `clean_html()`, `article_age_hours()`, `timeliness_score()`, `deduplicate()` |
-| `test_database.py` | Article CRUD, script CRUD, job queue enqueue/fetch |
-| `test_quality_gate.py` | Auto-approve threshold, auto-reject threshold, review range, word count, banned words |
+| `test_budget_enforcer.py` | Default limits, config overrides, monthly/daily hard stop raises, under-budget passes (7 tests) |
+| `test_news_aggregator.py` | `clean_html()`, `article_age_hours()`, `timeliness_score()`, `deduplicate()`, `probe_feeds()`, `score_article_heuristic()`, `pre_filter()` (27 tests) |
+| `test_database.py` | Article CRUD, script CRUD, job queue enqueue/fetch (5 tests) |
+| `test_quality_gate.py` | Auto-approve threshold, auto-reject threshold, review range, word count, banned words (5 tests) |
+| `test_persistent_dedup.py` | Article hash storage, get_seen_hashes, duplicate idempotency, pruning, DB-backed dedup integration (7 tests) |
+| `test_content_extractor.py` | Content extraction utilities |
+| `test_llm_pool.py` | LLM pool key rotation |
+| `test_news_source_prober.py` | RSS source health checking |
 
 ---
 

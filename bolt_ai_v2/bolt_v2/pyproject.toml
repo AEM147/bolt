@@ -1,0 +1,39 @@
+[project]
+name = "bolt-ai"
+version = "2.2.0"
+description = "Automated AI-powered short-form video content pipeline"
+requires-python = ">=3.10"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+src = ["code", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # do not perform function calls in argument defaults (FastAPI uses this)
+    "B905",   # zip without strict= (py3.10 compat)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["code"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["code"]
+addopts = "-v --tb=short"

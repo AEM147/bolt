@@ -71,9 +71,39 @@ app = FastAPI(
     version="2.2",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
+    dependencies=[Depends(_verify_api_key)],
 )
 
 import os as _os
+from fastapi import Depends, Request
+from fastapi.security import APIKeyHeader
+
+# ── API key authentication ─────────────────────────────────────────────────
+# Set BOLT_API_KEY in your environment or .env to enable auth.
+# When unset, auth is disabled (local development mode).
+
+_API_KEY = _os.environ.get("BOLT_API_KEY", "")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+# Paths that are always public (health checks, static assets, SSE)
+_PUBLIC_PATHS = {"/api/health", "/api/stream/status", "/", "/api/docs", "/api/redoc", "/openapi.json"}
+
+
+async def _verify_api_key(request: Request, api_key: str = Depends(_api_key_header)):
+    """
+    Dependency that enforces API key auth when BOLT_API_KEY is set.
+    Skips auth for health checks and static file serving.
+    """
+    if not _API_KEY:
+        return  # Auth disabled -- local dev mode
+    path = request.url.path
+    if path in _PUBLIC_PATHS or not path.startswith("/api/"):
+        return  # Public routes skip auth
+    if api_key != _API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key (X-API-Key header)")
+
+
+# ── CORS ───────────────────────────────────────────────────────────────────
 _cors_origins_env = _os.environ.get("BOLT_CORS_ORIGINS", "")
 _cors_origins = (
     [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
