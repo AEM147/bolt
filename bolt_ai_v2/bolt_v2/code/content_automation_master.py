@@ -223,30 +223,39 @@ async def run_full_pipeline():
     if not script:
         notify(notifier,"🛑 Halted","Script generation failed","error"); return
 
-    # HITL gate
-    if script.get("status")=="pending_review" and not CONFIG["automation"].get("auto_publish_enabled"):
-        hitl_cfg = CONFIG.get("hitl",{})
-        approved = await wait_for_approval(
-            script_id=script["content_id"],
-            timeout_hours=hitl_cfg.get("timeout_hours",12.0),
-            config=CONFIG, notifier=notifier,
-        )
-        if not approved:
-            logger.info("Pipeline stopped at HITL gate",extra={"content_id":script["content_id"]}); return
+    # HITL gate -- non-blocking per pre-plan Rule 3 ("pipeline never blocks")
+    # If pending_review: notify and EXIT. The human approves via dashboard/CLI,
+    # which creates a video job. The job worker handles everything from here.
+    if script.get("status") == "pending_review" and not CONFIG["automation"].get("auto_publish_enabled"):
+        db = get_db()
+        notify(notifier, "👁️ Awaiting Review",
+               f"Script {script['content_id']} needs approval.\n"
+               f"Dashboard: approve/reject in Content Management\n"
+               f"CLI: python hitl.py approve {script['content_id']}",
+               "warning", {"content_id": script["content_id"]})
+        logger.info("Pipeline paused at HITL gate -- exiting (job worker will continue after approval)",
+                     extra={"content_id": script["content_id"]})
+        return  # EXIT -- scheduler does not wait. Approval creates a video job.
+
+    # Auto-approved scripts continue immediately -- create video job
+    db = get_db()
 
     # Hard budget check before expensive video rendering
     try:
         BudgetEnforcer(CONFIG).check_or_raise("video")
     except BudgetExceededError as e:
-        notify(notifier,"🛑 Budget Hard Stop",str(e),"error")
-        logger.error("Budget exceeded before video step",extra={"limit_type":e.limit_type,"spent":e.spent})
+        notify(notifier, "🛑 Budget Hard Stop", str(e), "error")
+        logger.error("Budget exceeded before video step", extra={"limit_type": e.limit_type, "spent": e.spent})
+        # Defer to midnight instead of dropping
+        db.enqueue_job("video", content_id=script["content_id"], max_attempts=3)
+        logger.info("Video job deferred (budget exceeded)", extra={"content_id": script["content_id"]})
         return
 
     video = step_video(notifier, cb, tracker)
     if video and (video.get("video_ready") or video.get("audio_path")):
         step_publish(notifier, cb, tracker)
     else:
-        notify(notifier,"⏭️ Publish Skipped","No media produced","warning")
+        notify(notifier, "⏭️ Publish Skipped", "No media produced", "warning")
 
     step_analytics(notifier, tracker)
 

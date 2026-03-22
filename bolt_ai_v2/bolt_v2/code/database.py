@@ -107,7 +107,19 @@ CREATE TABLE IF NOT EXISTS publications (
     error_msg   TEXT,
     scheduled_at TEXT,
     published_at TEXT NOT NULL,
+    views       INTEGER DEFAULT 0,       -- populated 24h later by analytics_tracker
+    engagement_rate REAL DEFAULT 0,      -- populated 24h later by analytics_tracker
     UNIQUE(content_id, platform)
+);
+
+CREATE TABLE IF NOT EXISTS dead_letters (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id        INTEGER,
+    job_type      TEXT NOT NULL,
+    content_id    TEXT,
+    error_msg     TEXT,
+    attempts      INTEGER DEFAULT 0,
+    dead_at       TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS analytics_snapshots (
@@ -424,6 +436,42 @@ class BoltDB:
                 package.get("video_completed_at", now),
             ))
 
+    def update_video_status(self, content_id: str, status: str, **fields) -> None:
+        """
+        Incremental video status update -- write partial progress to DB
+        so crash recovery can resume from the last successful sub-step.
+
+        Pre-plan pattern: after audio -> status='audio_ready', after avatar
+        -> status='avatar_ready', after assembly -> status='assembled'.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        # Build dynamic SET clause from provided fields
+        set_parts = ["status=?", "completed_at=?"]
+        params: list = [status, now]
+        for col, val in fields.items():
+            set_parts.append(f"{col}=?")
+            params.append(val)
+        params.append(content_id)
+        sql = f"UPDATE videos SET {', '.join(set_parts)} WHERE content_id=?"
+        with _get_conn(self.db_path) as conn:
+            conn.execute(sql, params)
+
+    def ensure_video_row(self, content_id: str) -> None:
+        """Create a pending video row if one doesn't exist yet."""
+        with _get_conn(self.db_path) as conn:
+            conn.execute("""
+                INSERT OR IGNORE INTO videos (content_id, status, completed_at)
+                VALUES (?, 'pending', ?)
+            """, (content_id, datetime.now(timezone.utc).isoformat()))
+
+    def get_video_status(self, content_id: str) -> Optional[dict]:
+        """Get the current video record for resume-after-crash logic."""
+        with _get_conn(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT * FROM videos WHERE content_id=?", (content_id,)
+            ).fetchone()
+            return dict(row) if row else None
+
     # ── Publications ─────────────────────────────────────────────────────
 
     def save_publication(self, content_id: str, platform: str,
@@ -438,6 +486,16 @@ class BoltDB:
                 VALUES (?,?,?,?,?,?,?,?)
             """, (content_id, platform, 1 if success else 0,
                   url, post_id, error_msg, scheduled_at, now))
+
+    def update_publication_metrics(self, content_id: str, platform: str,
+                                    views: int, engagement_rate: float) -> None:
+        """Update views and engagement_rate on a publication (24h after posting)."""
+        with _get_conn(self.db_path) as conn:
+            conn.execute("""
+                UPDATE publications
+                SET views=?, engagement_rate=?
+                WHERE content_id=? AND platform=?
+            """, (views, engagement_rate, content_id, platform))
 
     def save_publish_results(self, content_id: str, results: dict) -> None:
         """Save publish results for all platforms from a results dict."""
@@ -577,6 +635,22 @@ class BoltDB:
                   error_msg=?, next_run_at=?, updated_at=?
                 WHERE id=?
             """, (error[:500], next_run, now.isoformat(), job_id))
+
+    def save_dead_letter(self, job: dict) -> None:
+        """Record a permanently failed job in the dead_letters table."""
+        now = datetime.now(timezone.utc).isoformat()
+        with _get_conn(self.db_path) as conn:
+            conn.execute("""
+                INSERT INTO dead_letters (job_id, job_type, content_id, error_msg, attempts, dead_at)
+                VALUES (?,?,?,?,?,?)
+            """, (
+                job.get("id"),
+                job.get("job_type", "unknown"),
+                job.get("content_id", ""),
+                job.get("error_msg", "max attempts exceeded"),
+                job.get("attempts", 0),
+                now,
+            ))
 
     def complete_job(self, job_id: int) -> None:
         now = datetime.now(timezone.utc).isoformat()

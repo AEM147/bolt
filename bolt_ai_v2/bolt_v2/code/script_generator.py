@@ -43,11 +43,11 @@ Bolt's catchphrases (rotate, never repeat the same one twice in a row):
 """
 
 SCRIPT_FORMAT = """
-[HOOK] — 1–2 sentences, surprising or urgent opening
-[STORY] — 3–4 sentences explaining the news simply
-[IMPACT] — 1–2 sentences on why this matters to the viewer
-[CTA] — Subscribe/follow call to action (1 sentence)
-[CATCHPHRASE] — Bolt's closing line
+[HOOK 0-3s] — One sentence. No greeting. No "hey guys." Stop the scroll with something alarming, counterintuitive, or specific beyond expectation. The first word must be signal, not noise.
+[STAKES 3-8s] — Why this matters to the VIEWER. Anchor the story to their life. Widen the gap between the hook's question and its answer. Do NOT answer the hook yet.
+[PAYLOAD 8-30s] — Maximum 3 facts. Each simpler than the last so momentum builds. Explain jargon by analogy, not definition. Every sentence adds new information or intensifies the previous one. Never recap.
+[PUNCHLINE 30-40s] — Answer the hook's question with something the viewer did NOT predict. The ending must reframe the story. This is why people share.
+[CTA + CATCHPHRASE 40-45s] — Exactly ONE ask (follow OR link, never both), then Bolt's closing catchphrase.
 """
 
 PLATFORM_CAPTIONS_PROMPT = """Based on this Bolt video script, write optimised captions for 3 platforms.

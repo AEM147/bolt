@@ -237,30 +237,96 @@ def generate_thumbnail(article, content_id, config):
 
 # ── MAIN ORCHESTRATOR ──
 def run_video_pipeline(package, config):
+    """
+    Run the full video pipeline with incremental DB writes.
+
+    After each sub-step (audio, avatar, assembly), status is written
+    to the DB immediately so crash recovery can resume from the last
+    successful sub-step. This follows the pre-plan Pattern 4:
+    "State is always in the DB, never in memory."
+    """
     cid, script, article = package["content_id"], package["script"], package["article"]
     logger.info(f"Free video pipeline: {cid}")
 
-    audio, audio_provider = synthesize_voice(script, cid, config)
-    if not audio:
-        package.update({"status":"failed_voice","error":"All free TTS providers failed. pip install edge-tts"}); return package
+    # Get DB for incremental status writes
+    try:
+        from database import get_db
+        db = get_db()
+        db.ensure_video_row(cid)
+    except Exception:
+        db = None  # Graceful degradation -- still works without incremental writes
+
+    # Check if we can resume from a previous partial run
+    existing = db.get_video_status(cid) if db else None
+    if existing and existing.get("status") in ("audio_ready", "avatar_ready"):
+        logger.info(f"Resuming video pipeline from status={existing['status']}", extra={"content_id": cid})
+
+    # ── Sub-step 1: Voice synthesis ──
+    if (existing and existing.get("audio_path")
+            and existing["status"] in ("audio_ready", "avatar_ready")
+            and Path(existing["audio_path"]).exists()):
+        audio = existing["audio_path"]
+        audio_provider = existing.get("audio_provider", "edge_tts")
+        logger.info(f"Skipping voice synthesis -- resuming with existing audio", extra={"content_id": cid})
+    else:
+        audio, audio_provider = synthesize_voice(script, cid, config)
+        if not audio:
+            package.update({"status": "failed", "error": "All free TTS providers failed"})
+            if db:
+                db.update_video_status(cid, "failed")
+            return package
+        # Incremental write: audio done
+        if db:
+            db.update_video_status(cid, "audio_ready", audio_path=audio, audio_provider=audio_provider)
+            logger.info("Video status -> audio_ready", extra={"content_id": cid})
+
     package["audio_path"] = audio
     package["audio_provider"] = audio_provider
 
-    avatar = create_vidnoz_video(audio, cid, config)
-    avatar_provider = "vidnoz" if avatar else None
-    if not avatar:
-        avatar = create_did_video(audio, cid, config)
-        avatar_provider = "did" if avatar else None
-    if not avatar: logger.warning("No avatar available — using text-card fallback")
+    # ── Sub-step 2: Avatar generation ──
+    if (existing and existing.get("avatar_path")
+            and existing["status"] == "avatar_ready"
+            and Path(existing["avatar_path"]).exists()):
+        avatar = existing["avatar_path"]
+        avatar_provider = existing.get("avatar_provider")
+        logger.info(f"Skipping avatar generation -- resuming with existing avatar", extra={"content_id": cid})
+    else:
+        avatar = create_vidnoz_video(audio, cid, config)
+        avatar_provider = "vidnoz" if avatar else None
+        if not avatar:
+            avatar = create_did_video(audio, cid, config)
+            avatar_provider = "did" if avatar else None
+        if not avatar:
+            logger.warning("No avatar available -- using text-card fallback")
+        # Incremental write: avatar done (or skipped to text-card)
+        if db:
+            db.update_video_status(
+                cid, "avatar_ready",
+                avatar_path=avatar or "", avatar_provider=avatar_provider or "ffmpeg_fallback",
+            )
+            logger.info("Video status -> avatar_ready", extra={"content_id": cid})
+
     package["avatar_video_path"] = avatar
     package["avatar_provider"] = avatar_provider
 
+    # ── Sub-step 3: Assembly ──
     final = assemble_ffmpeg(audio, avatar, cid, script, config)
     package["final_video_path"] = final
     package["video_ready"] = final is not None
     package["thumbnail_path"] = generate_thumbnail(article, cid, config)
     package["status"] = "ready_to_publish" if final else ("audio_only" if audio else "failed")
     package["video_completed_at"] = datetime.now(timezone.utc).isoformat()
+
+    # Incremental write: assembled (or failed)
+    if db:
+        final_status = "assembled" if final else "failed"
+        db.update_video_status(
+            cid, final_status,
+            final_path=final or "", thumbnail_path=package.get("thumbnail_path") or "",
+            video_ready=1 if final else 0,
+        )
+        logger.info(f"Video status -> {final_status}", extra={"content_id": cid})
+
     logger.info(f"Pipeline done: {package['status']}"); return package
 
 def run(config_path="code/config.json"):

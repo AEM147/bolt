@@ -45,17 +45,42 @@ class ValidationResult:
 # ── Default banned words (config.json overrides these) ────────────────────
 
 DEFAULT_BANNED_WORDS = [
-    # Epistemic weasel words
-    "allegedly", "reportedly", "may have", "we think", "supposedly",
-    "claimed", "some say", "might be", "could be",
-    # Misinformation risk
+    # ── Pre-plan Opening Killers ──
+    # Any greeting opening (delays hook by 2-3 seconds)
+    "hey everyone", "what's up guys", "welcome back", "hey guys",
+    "hi everyone", "hello everyone", "good morning", "good evening",
+    # Apologetic or hedged opening (signals low confidence)
+    "this might sound weird", "i know this is controversial",
+    "this may seem strange", "bear with me",
+    # Context before hook (background before reason to care)
+    "so there's this company", "let me explain",
+
+    # ── Pre-plan Content Killers ──
+    # Vague sourcing (destroys credibility)
+    "some experts say", "reportedly", "allegedly", "supposedly",
+    "some say", "may have", "we think", "claimed",
+    "might be", "could be", "sources say",
+    # Multiple CTAs (decision paralysis -- pre-plan says exactly ONE)
+    "follow, like, comment", "like and subscribe", "follow and share",
+
+    # ── Epistemic weasel words ──
     "100% confirmed", "breaking: official", "just confirmed",
     "guaranteed", "certain that", "proven fact",
-    # Off-brand for Bolt
+
+    # ── Off-brand for Bolt (recap/summary language) ──
     "in conclusion", "to summarize", "as I mentioned",
     "firstly", "secondly", "thirdly", "in summary",
-    # Copyright risk
+    "to sum up", "let me recap",
+
+    # ── Copyright risk ──
     "according to [publication]", "as reported by",
+]
+
+# ── Pre-plan Forbidden List: Opening patterns (regex-based) ──────────────
+FORBIDDEN_OPENING_PATTERNS = [
+    r"^(hey|hi|hello|what'?s up|welcome|good (morning|evening|afternoon))\b",
+    r"^(so |okay so |alright so )",  # context-before-hook
+    r"^(this might|i know this|bear with me)",  # hedged/apologetic
 ]
 
 # Phrases that suggest the script is hallucinating specific details
@@ -132,7 +157,13 @@ class ContentValidator:
             warnings.append(f"Potential hallucination risk phrases: {'; '.join(halluc_matches[:2])}")
             # Don't fail — warn only
 
-        # 5. Duplicate detection
+        # 5. Forbidden opening patterns (pre-plan opening killers)
+        check_opening, opening_match = self._check_opening_pattern(script)
+        checks["opening_pattern"] = check_opening
+        if not check_opening:
+            failures.append(f"Forbidden opening pattern: {opening_match}")
+
+        # 6. Duplicate detection
         if recent_scripts:
             check_dup, sim_score = self._check_duplicate(script, recent_scripts)
             checks["duplicate"] = check_dup
@@ -210,6 +241,19 @@ class ContentValidator:
             matches.extend(found)
         # Warn if more than 2 specific claims (harder to verify)
         return len(matches) <= 2, matches
+
+    def _check_opening_pattern(self, script: str) -> tuple[bool, str]:
+        """
+        Check for forbidden opening patterns from the pre-plan.
+        The first sentence must NOT be a greeting, hedged opening, or
+        context-before-hook pattern.
+        """
+        first_line = script.strip().split(".")[0].strip().lower() if script else ""
+        for pattern in FORBIDDEN_OPENING_PATTERNS:
+            match = re.search(pattern, first_line, re.IGNORECASE)
+            if match:
+                return False, f"Opening matches forbidden pattern: '{match.group()}'"
+        return True, ""
 
     def _check_duplicate(self, script: str,
                            recent_scripts: list[str]) -> tuple[bool, float]:
