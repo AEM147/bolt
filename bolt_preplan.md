@@ -534,3 +534,386 @@ No stage waits for a human. No stage waits for the next stage. Each stage exits 
 ---
 
 *This document represents the complete pre-coding theory for Bolt AI. No implementation detail should contradict anything written here. When in doubt about an architectural decision, return to the three invariant rules and the four data models.*
+
+---
+
+## Part 2 — Logic Tree and Coding Method
+
+---
+
+## 11. Architecture in Layers
+
+Seven layers. Each layer has one concern. Layers only talk to the layer directly adjacent to them.
+
+**Layer 1 — Config and secrets.** Loads once at startup. Every other layer receives config as a parameter. Nothing loads config independently.
+
+**Layer 2 — Database.** Single SQLite file. All state lives here. No layer shares state with another layer directly — they pass through the DB.
+
+**Layer 3 — Pipeline modules.** news_aggregator, script_generator, video_pipeline, platform_publisher, analytics_tracker. Each reads from DB, writes to DB, returns. Nothing else.
+
+**Layer 4 — Orchestrator.** Reads DB state, decides which module to call next, passes config. The only place that knows the pipeline sequence.
+
+**Layer 5 — Job worker.** Polls DB for pending jobs continuously. Runs in its own process. Connects pipeline stages separated by the human gate or a failure.
+
+**Layer 6 — API server.** FastAPI. Reads DB for dashboard data. Writes human decisions to DB. Never imports pipeline modules.
+
+**Layer 7 — Dashboard.** React. Calls API endpoints only. No direct DB access. Shows real state, not demo data.
+
+The test for correct layering: can you replace any one layer without touching any other? If yes, the architecture is clean.
+
+---
+
+## 12. The Two Processes
+
+The system runs as two independent processes sharing one database. They never call each other.
+
+**Process A — pipeline scheduler**
+Fires at 06:00 UTC. Runs news aggregation, then script generation. If auto-approved, creates a video job and exits. If pending review, sends notification and exits. It never waits.
+
+**Process B — job worker (always running)**
+Polls DB every 30 seconds. On finding a pending job: budget check, run the job, write result, create next job or mark failed. Exponential backoff on failure. Dead letter after max attempts.
+
+---
+
+## 13. Module Contracts
+
+Every module is defined by three things: what it receives, what it guarantees to return, and what it is forbidden from doing. A module that violates its contract is broken regardless of whether it produces the right output.
+
+### shared_config.py
+- Receives: optional path override
+- Returns: one config dict with all secrets injected, module-level cached
+- Forbidden: making any API call, writing anything, being called more than once per module
+
+### news_aggregator.py
+- Receives: config dict
+- Returns: list of Article dicts saved to DB
+- Side effect: writes Article rows to DB with status=scored, nothing else
+- Async rule: this is the one async module — concurrent RSS fetching is its purpose
+- Forbidden: calling script_generator, knowing what happens after it returns
+
+### script_generator.py
+- Receives: config dict
+- Returns: Script dict with content_id, script text, quality scores, captions, status. Returns None if no article available.
+- Side effect: reads top Article from DB, writes Script row, updates Article status, creates Job if auto-approved
+- content_id: generated here, format `bolt_YYYYMMDD_HHMMSS`, never changed anywhere else
+- Forbidden: calling video_pipeline, waiting for human input
+
+### content_validator.py
+- Receives: script text, article dict, config dict
+- Returns: ValidationResult with passed bool, score, failures list, warnings list
+- Called by: script_generator only, after Claude generates and before writing to DB
+- Forbidden: writing to DB, making API calls, modifying the script, any side effects
+
+### video_pipeline.py
+- Receives: content_id string, config dict
+- Returns: Video dict with audio_path, avatar_path, final_path, thumbnail_path, status, provider names
+- Side effect: reads Script from DB, writes files to disk, writes Video row, updates Video status incrementally
+- Incremental writes: after audio → write audio_path + status=audio_ready; after avatar → avatar_path + status=avatar_ready; after assembly → final_path + status=assembled
+- Forbidden: using asyncio.run() internally, calling platform_publisher, raising exceptions
+
+### platform_publisher.py
+- Receives: content_id string, config dict
+- Returns: dict keyed by platform, each value contains success bool and post_url or error_msg
+- Side effect: reads Video from DB, calls Buffer API, writes one Publication row per platform, creates retry Job rows for failed platforms
+- Forbidden: raising on platform failure — a failed platform is a failed Publication, not a crashed module
+
+### analytics_tracker.py
+- Receives: config dict
+- Returns: summary dict with channel-level metrics per platform
+- Side effect: reads Publications older than 24h, fetches metrics, updates Publication rows, writes analytics_snapshots
+- Forbidden: running during pipeline hours, blocking other pipeline steps
+
+---
+
+## 14. Decision Trees
+
+### Decision tree 1 — after script scoring
+
+Input: overall_score (0.0–10.0), word_count, validator result.
+
+- Validator failed: status=pending_review regardless of score. Attach failure list. Send notification. Exit.
+- Score below 6.0: status=rejected. Mark article skipped. Try next article. No notification.
+- Score 6.0–9.0: status=pending_review. Send notification with script preview and approve/reject commands. Exit. No video job created.
+- Score above 9.0 AND validator passed: status=approved, auto_approved=true. Create Job(type=video). Exit.
+
+The thresholds are config values, never hardcoded. They will be tuned after the first two weeks of real output.
+
+### Decision tree 2 — voice synthesis fallback chain
+
+1. Edge-TTS: try to generate audio. File exists and size greater than 0 bytes → done.
+2. Google Cloud TTS: try only if key configured and not placeholder. File valid → done. Record provider.
+3. ElevenLabs: try only if both key and voice_id configured. Record cost.
+4. All failed: set Video status=failed, create retry Job with backoff. Do not proceed to avatar.
+
+### Decision tree 3 — avatar generation fallback chain
+
+1. Vidnoz: submit audio, poll for completion (max 5 minutes). Video URL returned → download and save.
+2. D-ID: try only if key configured and credits remaining. Same poll pattern.
+3. FFmpeg text card: always available. Static background with subtitles. Never fails.
+
+The FFmpeg fallback means video production can never completely fail.
+
+### Decision tree 4 — job worker on failure
+
+- Attempt 1 fails: status=retrying, next_run_at = now + 5 minutes
+- Attempt 2 fails: next_run_at = now + 30 minutes
+- Attempt 3 fails: next_run_at = now + 2 hours, send error notification
+- Attempt 4 fails (max reached): status=dead, write to dead_letter log, send critical notification, no more retries
+- Budget exceeded: status=deferred, next_run_at = midnight UTC, not a failure
+
+---
+
+## 15. Coding Patterns
+
+### Pattern 1 — Config is a parameter, never a global
+Every function that needs config receives it as a parameter. No function calls `get_config()` internally. No module-level config variable. Exception: shared_config.py itself. Everywhere else, config arrives as a parameter. This is the difference between testable and untestable code.
+
+### Pattern 2 — Sync everywhere, async only for concurrent I/O
+news_aggregator.py is the only async module. Everything else is sync. content_automation_master.py calls news_aggregator with `asyncio.run()` at the top level. This call is never nested. asyncio.run() is called exactly once per pipeline run.
+
+### Pattern 3 — Modules return, never raise
+Every module function catches its own exceptions and returns a result with a status field indicating failure. The orchestrator checks status fields, never wraps module calls in try/except. An unhandled exception in a module crashes the orchestrator process. Returning a failure dict keeps the process alive.
+
+### Pattern 4 — State is always in the DB, never in memory
+Every step writes its result to the DB before returning. Kill the process after any step and restart — the pipeline continues from the last successful DB write. The Video pipeline writes status incrementally after each sub-step so partial progress is preserved.
+
+### Pattern 5 — One responsibility per file
+The test: can you describe what this file does in one sentence without using "and"? If you need "and", the file has two responsibilities and should be split. budget_enforcer.py checks budgets and does not send notifications. notifications.py sends notifications and does not check budgets.
+
+### Pattern 6 — Every external call has a timeout
+| Category | Timeout |
+|----------|---------|
+| RSS fetches | 10 seconds |
+| Claude API | 30 seconds |
+| Voice synthesis | 60 seconds |
+| Avatar generation polling | 5 minutes total, 30-second intervals |
+| Publishing | 30 seconds |
+| DB queries | 30 seconds |
+
+A hung API call with no timeout stalls the job worker process indefinitely. This is worse than a failed call.
+
+---
+
+## 16. Error Philosophy
+
+Three categories. Each category has one response. Using the wrong response is a bug in the error handling.
+
+**Category 1 — Transient failures**
+The error would not occur if retried in a few minutes. Examples: HTTP 429, 503, connection timeout, quota exhausted temporarily.
+Response: catch, log WARNING, create retry job with exponential backoff, return status=failed, never raise.
+
+**Category 2 — Configuration failures**
+Missing or wrong secret or setting. Retrying will not help. Examples: API key placeholder not replaced, voice ID missing, token expired.
+Response: catch, log ERROR with exact missing key, send notification, continue with fallback if available, no retry job.
+
+**Category 3 — Programmer errors**
+Wrong type, wrong field name, wrong assumption about data shape. Examples: KeyError on a field that always exists, TypeError on a known type.
+Response: let it raise. Do not catch. Do not handle gracefully. It must crash visibly in testing and never reach production.
+
+### The logging contract
+
+Every log line at WARNING and above includes content_id if one exists.
+
+| Level | When |
+|-------|------|
+| DEBUG | Internal state transitions, every DB read and write, every fallback switch |
+| INFO | Every pipeline step start and completion, every job created/started/completed |
+| WARNING | Every fallback triggered, every retry scheduled, every budget alert, every rejection |
+| ERROR | Every caught transient failure, configuration failures, failed notifications |
+| CRITICAL | Budget hard stop, dead letter reached, process-level failure |
+
+---
+
+## 17. Build Sequence
+
+Each step produces something testable before moving to the next. Never build a module whose dependencies do not yet exist.
+
+### Phase 1 — Foundation
+1. shared_config.py + secrets_manager.py
+2. database.py — all 7 tables, all CRUD methods, every method tested
+3. observability.py — structured logging and rate limiter
+4. budget_enforcer.py — hard stops, tested at correct thresholds
+
+### Phase 2 — Pipeline (text only, no video)
+5. news_aggregator.py — RSS fetching and Claude scoring
+6. content_validator.py — pure functions, no mocks needed, test every check with crafted inputs
+7. script_generator.py — Claude generation, validator integration, content_id generation
+8. hitl.py — flag files, notification, approve/reject, DB status update
+
+The full pipeline is testable end-to-end from step 8. Run news → script → manually approve → see approved status in DB.
+
+### Phase 3 — Media production
+9. local_tts.py — Edge-TTS wrapper with fallback chain. Test by generating a real MP3.
+10. video_pipeline.py — audio + avatar + FFmpeg. Build FFmpeg text card fallback first.
+11. platform_publisher.py — Buffer API. Verify one Publication row per platform on success and failure.
+12. analytics_tracker.py — platform metric fetch and DB writes.
+
+### Phase 4 — Orchestration and interface
+13. job_worker.py — DB poll loop, retry logic, dead letter
+14. content_automation_master.py — built last because it only wires together tested modules. If hard to write, something in the modules is wrong.
+15. api.py — each endpoint is a thin wrapper around a DB read or write, no pipeline logic inside
+16. Dashboard (React) — each page calls a real endpoint, no page ships with hardcoded demo data
+
+---
+
+*This document is the complete pre-coding design for Bolt AI. The logic tree and coding method in Part 2 are the implementation constraints that make Part 1's content theory achievable in reliable, maintainable code.*
+
+---
+
+## Part 3 — Distribution Theory
+
+---
+
+## 18. The Core Distribution Model
+
+The production pipeline produces one master video file. Distribution is a separate transformation layer that adapts it per platform. The video pipeline knows nothing about distribution. Distribution knows nothing about how the video was made.
+
+**The three jobs of the distribution layer:**
+
+**Transform** — adapt the master file to each platform's technical requirements. Aspect ratio, caption burn-in, watermark position, file size limit.
+
+**Compose** — generate platform-specific metadata. Title, description, hashtags — each platform has different rules, different character limits, different algorithm signals.
+
+**Schedule and deliver** — post at the optimal time per platform, handle authentication, retry on failure, confirm delivery.
+
+These are three separate functions. A function that transforms and composes and schedules has three responsibilities and will be hard to test and harder to change.
+
+---
+
+## 19. What Repurpose.io Does — Copy and Skip
+
+### Copy these
+
+**Workflow model — source to destination.** Define a workflow: whenever a new video is produced, also post to TikTok with these settings. The workflow runs automatically. No manual triggers.
+
+**Per-destination customisation.** YouTube title is different from TikTok caption which is different from Instagram caption. Each destination gets its own metadata template, defined once and applied automatically.
+
+**Captions as a first-class feature.** Auto-generates captions and burns them into the video for platforms where silent autoplay is common. Not an afterthought — often the first thing viewers see.
+
+**Independent failure handling.** A post that fails on TikTok does not stop the YouTube post. Each platform is independent. Failed posts are queued for retry.
+
+### Skip these
+
+**Multi-source ingestion.** Repurpose.io watches RSS feeds, YouTube channels, podcasts. Bolt has one source: its own pipeline. No ingestion layer needed.
+
+**Human approval inside distribution.** Bolt's human gate is at the script level, before any media is produced. By the time distribution runs, the content is already approved. Distribution is fully automatic.
+
+**Generic format conversion.** Bolt always produces 1080×1920. No landscape-to-portrait conversion needed.
+
+### Where Bolt beats Repurpose.io
+
+Repurpose.io treats content as a generic media file. It does not understand the content. Bolt knows what the content is about — the article, the pillar, the key facts, the hook type used. The distribution layer can generate contextually relevant metadata: a YouTube title built from the actual script hook, TikTok hashtags selected by content pillar and historical performance, an Instagram caption that repurposes the punchline as standalone text. Repurpose.io cannot do this. Bolt can. This is the moat.
+
+---
+
+## 20. The Platform Adapter Pattern
+
+Each platform is a separate adapter. Every adapter implements the same interface. The distribution orchestrator does not know which platform it is talking to — it calls the interface. Adding a new platform requires writing one new adapter and nothing else.
+
+**The interface every adapter must implement:**
+
+`transform(master_video_path, script, article, config) → PlatformPackage`
+Takes the master video and source data. Returns a platform-specific package with video file, title, caption, hashtags, and thumbnail.
+
+`publish(package, config) → PublicationResult`
+Takes the platform package. Posts it. Returns success bool, post URL, platform post ID. Never raises.
+
+`validate_credentials(config) → bool`
+Checks API credentials are configured and not placeholders. Called at startup, not during posting.
+
+### YouTube adapter
+- Transform: same master file, 1280×720 thumbnail, title is script hook max 100 chars
+- Metadata: description with script summary + source URL + affiliate links + hashtags, up to 15 tags, category 28
+- Publish: YouTube Data API v3 direct upload, resumable for files over 5MB
+
+### TikTok adapter
+- Transform: same master file, captions burned in for silent autoplay
+- Metadata: hook + 2 key facts + catchphrase + 3–5 hashtags maximum, never more
+- Publish: Buffer API primary, TikTok Content Posting API direct when approved
+
+### Instagram adapter
+- Transform: same master file for Reels, square thumbnail 1080×1080, cover frame from second 2 not frame 0
+- Metadata: punchline as standalone caption, up to 30 hashtags in first comment not in caption
+- Publish: Buffer API primary, Instagram Graph API direct as fallback
+
+---
+
+## 21. Scheduling Logic
+
+### How the algorithm uses posting time
+
+**YouTube Shorts:** Algorithms samples immediately after posting — measuring completion rate on a test audience. Post when US tech workers are actively browsing: 12:00–14:00 EST weekdays.
+
+**TikTok:** Initial velocity in the first 30 minutes determines whether the video enters a broader distribution pool. Post when engagement probability is highest: 18:00–21:00 EST. Never during sleep hours.
+
+**Instagram Reels:** Favours consistent patterns over peak hours. Same time every day outperforms chasing trends. Pick 12:00 EST and never deviate.
+
+### The scheduling model
+
+**Phase 1 (Buffer, weeks 1–8):** Fixed schedule. YouTube 13:00 EST, TikTok 19:00 EST, Instagram 12:00 EST. Do not change times based on gut feel — wait for data.
+
+**Phase 2 (data-informed, month 3+):** After 30 posts, calculate best-performing time slot per platform from analytics data and adjust automatically.
+
+**The spacing rule:** Never post to all three platforms within 10 minutes of each other. Stagger by at least 2 hours. Simultaneous posting triggers spam detection and reduces distribution on all three.
+
+### The confirmation loop
+
+Scheduling is not confirming. A post scheduled through Buffer may fail to publish.
+
+1. Post scheduled via Buffer → Publication record created with status=scheduled
+2. Confirmation check runs 15 minutes after scheduled_at → platform API polled for the post → status updated to live or failed
+3. 24h metric fetch → views, completion rate, likes recorded → feedback data stored
+
+---
+
+## 22. The Distribution Growth Loop
+
+Four steps. Repeats indefinitely.
+
+**Post → measure.** Every post generates a metric record at 24h: views, completion rate, engagement rate.
+
+**Measure → learn.** After 20 posts, calculate which content pillar performs best per platform, which posting time produces most views, which hook patterns correlate with completion rate. Store as config overrides.
+
+**Learn → adjust.** Distribution layer reads learned preferences when scheduling next video. If ai_tools posts get 2× views of ai_concepts on TikTok, weight ai_tools more heavily on those days.
+
+**Adjust → post again.** The cycle repeats. After 90 days the system has learned optimal content mix, posting times, and caption style for each platform without manual intervention.
+
+### What this enables beyond Repurpose.io
+
+**Content-aware hashtag selection.** Hashtags that appeared in high-performing posts of the same pillar are weighted higher in selection.
+
+**Hook performance correlation.** After 30 posts, the system knows which hook type (consequence, contradiction, threat) gets the best completion rate on which platform. Script generator is nudged toward better-performing hooks.
+
+**Affiliate link rotation.** Caption composer selects the highest-earning affiliate link relevant to the specific video topic, not a generic link.
+
+---
+
+## 23. Distribution Layer Build Sequence
+
+Built after the production pipeline produces a real video. Kept separate — never imports from production pipeline modules.
+
+**Step 1 — Distribution orchestrator.** Takes content_id, reads Video and Script from DB, instantiates configured platform adapters, calls transform() and publish() on each, writes Publication records. Does not know which platforms it is talking to.
+
+**Step 2 — Caption composer.** Separate module called by each adapter. Takes script + article + platform + config. Returns platform-optimised metadata. Has access to content_extractor output and historical performance data. This is where Bolt's content-awareness advantage lives.
+
+**Step 3 — Confirmation checker.** Job that runs 15 minutes after each scheduled post. Queries platform API. Updates Publication status. Creates retry job if post not found.
+
+**Step 4 — Feedback aggregator.** Weekly job that reads all Publication records, calculates performance by pillar, hook type, time slot. Writes performance_config override that distribution orchestrator reads on next run.
+
+---
+
+## 24. New Modules in the Distribution Layer
+
+| Module | Responsibility |
+|--------|---------------|
+| distribution_orchestrator.py | Load adapters, call transform + publish per platform, write Publications |
+| caption_composer.py | Generate platform-specific metadata using content and performance data |
+| adapters/youtube.py | YouTube-specific transform and publish logic |
+| adapters/tiktok.py | TikTok-specific transform and publish logic |
+| adapters/instagram.py | Instagram-specific transform and publish logic |
+| confirmation_checker.py | Verify posts went live 15 minutes after scheduled time |
+| feedback_aggregator.py | Calculate performance patterns and update distribution config |
+
+---
+
+*Distribution is a separate concern from production. The boundary is the master video file. Everything before it is the production pipeline. Everything after it is the distribution layer. They share the database. They never import each other.*
