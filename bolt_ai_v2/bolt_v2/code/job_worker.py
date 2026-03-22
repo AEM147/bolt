@@ -145,9 +145,31 @@ async def run_job(job: dict, config: dict) -> bool:
                         return True
                     video = step_video(notifier, cb, tracker)
                     if video and (video.get("video_ready") or video.get("audio_path")):
-                        step_publish(notifier, cb, tracker)
+                        # Use distribution layer instead of legacy publisher
+                        from distribution_orchestrator import distribute
+                        distribute(result["content_id"], config)
                     step_analytics(notifier, tracker)
             return ok
+
+        elif job_type == "distribute":
+            # Distribution layer -- transform + publish to all platforms
+            from distribution_orchestrator import distribute
+            results = distribute(content_id, config)
+            return any(r.get("success") for r in results.values()) if isinstance(results, dict) else False
+
+        elif job_type.startswith("distribute_"):
+            # Platform-specific retry (e.g. distribute_youtube, distribute_tiktok)
+            platform = job_type.replace("distribute_", "")
+            from distribution_orchestrator import distribute
+            # Re-run full distribution for this content (adapter will handle the specific platform)
+            results = distribute(content_id, config)
+            return results.get(platform, {}).get("success", False) if isinstance(results, dict) else False
+
+        elif job_type == "confirm_posts":
+            # Confirmation checker -- verify posts went live 15min after scheduling
+            from confirmation_checker import check_publications
+            results = check_publications(content_id, config)
+            return all(r.get("confirmed") for r in results.values()) if results else True
 
         else:
             logger.warning(f"Unknown job type: {job_type}")
