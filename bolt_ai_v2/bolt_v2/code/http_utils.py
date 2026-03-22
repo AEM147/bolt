@@ -99,10 +99,7 @@ _HOST_RATE_LIMITS: dict[str, float] = {
     "deepmind.google": 1.0,
     "techcrunch.com": 0.5,
     "www.theverge.com": 0.5,
-    "www.technologyreview.com": 1.0,
-    "www.wired.com": 0.5,
     "venturebeat.com": 0.5,
-    "feeds.arstechnica.com": 0.5,
     "www.sciencedaily.com": 1.0,
     "ai.googleblog.com": 1.0,
     "huggingface.co": 1.0,
@@ -110,7 +107,6 @@ _HOST_RATE_LIMITS: dict[str, float] = {
     "www.microsoft.com": 1.0,
     "www.artificialintelligence-news.com": 1.0,
     "www.kdnuggets.com": 1.0,
-    "towardsdatascience.com": 1.0,
     # APIs -- respect documented limits
     "api.anthropic.com": 0.1,       # 50 req/min -> ~1.2s
     "api.elevenlabs.io": 3.0,       # 20 req/min -> 3s

@@ -96,6 +96,18 @@ async def step_news(notifier, cb, tracker):
         await rate_limiter.acquire("claude")
         articles = await news_aggregator.run()
         if articles:
+            # Enrich articles with fuzzy classification (free, no API key needed)
+            try:
+                from content_extractor import fuzzy_classify
+                for a in articles:
+                    extraction = fuzzy_classify(a.get("title", ""), a.get("summary", ""))
+                    a["category"] = extraction.category
+                    a["sentiment"] = extraction.sentiment
+                    a["impact_score"] = extraction.impact_score
+                    a["companies_mentioned"] = extraction.companies_mentioned
+                    a["technologies_mentioned"] = extraction.technologies_mentioned
+            except ImportError:
+                logger.debug("content_extractor not available -- skipping enrichment")
             db.save_articles(articles)
             cb.record_success("news")
             notify(notifier,"📡 News Aggregated",
@@ -169,8 +181,9 @@ def step_publish(notifier, cb, tracker):
             db.save_publish_results(result.get("content_id", result["article"]["title"][:20]), res)
             lines=[f"{'✅' if r.get('success') else '❌'} {p.title()}: {(r.get('url') or r.get('error',''))[:50]}"
                    for p,r in res.items()]
-            tracker.increment_video_count()
             ok=sum(1 for r in res.values() if r.get("success"))
+            if ok > 0:
+                tracker.increment_video_count()
             notify(notifier,"🚀 Published","\n".join(lines),"info" if ok else "warning",{"platforms_ok":ok})
             logger.info("Published",extra={"content_id":result.get("content_id"),"platforms_ok":ok})
         return result

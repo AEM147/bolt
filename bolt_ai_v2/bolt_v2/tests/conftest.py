@@ -98,6 +98,9 @@ def sample_config():
             "audio": "/tmp/bolt_test/audio",
             "video": "/tmp/bolt_test/video",
             "thumbnails": "/tmp/bolt_test/thumbnails",
+            "queue": "/tmp/bolt_test/queue",
+            "published": "/tmp/bolt_test/published",
+            "analytics": "/tmp/bolt_test/analytics",
         },
     }
 

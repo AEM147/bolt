@@ -390,7 +390,7 @@ class BoltDB:
                 platform=platform,
                 success=r.get("success", False),
                 url=r.get("url", ""),
-                post_id=r.get("video_id", r.get("media_id", "")),
+                post_id=r.get("video_id", r.get("media_id", r.get("buffer_id", ""))),
                 error_msg=r.get("error", ""),
             )
 

@@ -37,6 +37,9 @@ class TestBudgetEnforcerChecks:
         }
         mock_tracker.get_daily_summary.return_value = {"total_cost": 0.5}
         mock_tracker.get_current_video_cost.return_value = 0.10
+        mock_tracker.get_total_summary.return_value = {
+            "total_spent": 1.0, "total_videos": 1, "avg_cost_per_video": 0.10
+        }
         enforcer._tracker = mock_tracker
 
         # Should not raise
